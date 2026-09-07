@@ -26,27 +26,31 @@ public class SandboxController {
 
     @GetMapping("/check-user")
     public CheckUserResponse checkUser(@RequestHeader("X-HW-AK") String ak,
-                                       @RequestHeader("X-HW-SK") String sk) {
-        return service.checkUser(ak, sk);
+                                       @RequestHeader("X-HW-SK") String sk,
+                                       @RequestHeader(value = "X-HW-Security-Token", required = false) String securityToken) {
+        return service.checkUser(ak, sk, securityToken);
     }
 
     @PostMapping("/sign-agreement")
     public SignAgreementResponse signAgreement(@RequestHeader("X-HW-AK") String ak,
-                                               @RequestHeader("X-HW-SK") String sk) {
-        return service.signAgreement(ak, sk);
+                                               @RequestHeader("X-HW-SK") String sk,
+                                               @RequestHeader(value = "X-HW-Security-Token", required = false) String securityToken) {
+        return service.signAgreement(ak, sk, securityToken);
     }
 
     @PostMapping("/connect")
     public ConnectResponse connect(@RequestBody ConnectRequest req,
                                    @RequestHeader("X-HW-AK") String ak,
-                                   @RequestHeader("X-HW-SK") String sk) {
-        return service.connect(req, ak, sk);
+                                   @RequestHeader("X-HW-SK") String sk,
+                                   @RequestHeader(value = "X-HW-Security-Token", required = false) String securityToken) {
+        return service.connect(req, ak, sk, securityToken);
     }
 
     @PostMapping("/credentials")
     public CredentialsResponse credentials(@RequestBody CredentialsRequest req,
                                            @RequestHeader("X-HW-AK") String ak,
-                                           @RequestHeader("X-HW-SK") String sk) {
-        return service.credentials(req, ak, sk);
+                                           @RequestHeader("X-HW-SK") String sk,
+                                           @RequestHeader(value = "X-HW-Security-Token", required = false) String securityToken) {
+        return service.credentials(req, ak, sk, securityToken);
     }
 }

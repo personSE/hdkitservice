@@ -40,7 +40,6 @@ class UserControllerTest {
 
     @MockBean
     private Masker masker;
-
     @MockBean
     private JwtService jwtService;
 

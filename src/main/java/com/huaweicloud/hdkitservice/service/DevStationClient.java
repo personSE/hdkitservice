@@ -31,9 +31,9 @@ public class DevStationClient {
         this.restClient = restClient;
     }
 
-    private JsonNode call(String method, String path, String query, String body, String ak, String sk) {
-        Signer.SignResult sr = Signer.sign(method, path, query, body == null ? "" : body,
-                ak, sk, config.endpointHost());
+    private JsonNode call(String method, String path, String query, String body, String ak, String sk, String securityToken) {
+        Signer.SignResult sr = Signer.signWithToken(method, path, query, body == null ? "" : body,
+                ak, sk, securityToken, config.endpointHost());
         String base = config.endpoint().replaceFirst("/$", "");
         String uri = base + path + (query.isEmpty() ? "" : "?" + query);
         try {
@@ -41,6 +41,9 @@ public class DevStationClient {
                     .uri(uri)
                     .header("Authorization", sr.authorization())
                     .header("X-Sdk-Date", sr.timestamp());
+            if (securityToken != null && !securityToken.isEmpty()) {
+                spec = spec.header("X-Security-Token", securityToken);
+            }
             if (body != null && !body.isEmpty()) {
                 spec = spec.body(body);
             }
@@ -63,7 +66,7 @@ public class DevStationClient {
     }
 
     public String create(String name, String templateId, String flavorId, String source,
-                         Map<String, String> env, Map<String, String> git, String ak, String sk) {
+                         Map<String, String> env, Map<String, String> git, String ak, String sk, String securityToken) {
         var body = mapper.createObjectNode();
         body.put("name", name);
         body.put("template_id", templateId);
@@ -77,13 +80,13 @@ public class DevStationClient {
             gitNode.put("repo_url", "").put("repo_branch", "").put("repo_name", "")
                     .put("target_path", "").put("open_type", "");
         }
-        JsonNode r = call("POST", "/open-api-public/v2/devenvs", "", body.toString(), ak, sk);
+        JsonNode r = call("POST", "/open-api-public/v2/devenvs", "", body.toString(), ak, sk, securityToken);
         return r.path("result").path("dev_stage_instance_id").asText();
     }
 
-    public List<Devenv> list(String nameEq, String ak, String sk) {
+    public List<Devenv> list(String nameEq, String ak, String sk, String securityToken) {
         String query = (nameEq == null || nameEq.isEmpty()) ? "" : "name_eq=" + nameEq;
-        JsonNode r = call("GET", "/open-api-public/v2/devenvs", query, "", ak, sk);
+        JsonNode r = call("GET", "/open-api-public/v2/devenvs", query, "", ak, sk, securityToken);
         List<Devenv> out = new ArrayList<>();
         for (JsonNode item : r.path("result")) {
             out.add(new Devenv(item.path("id").asText(), item.path("name").asText(),
@@ -92,30 +95,30 @@ public class DevStationClient {
         return out;
     }
 
-    public String statusOf(String devStageId, String ak, String sk) {
-        for (Devenv d : list("", ak, sk)) {
+    public String statusOf(String devStageId, String ak, String sk, String securityToken) {
+        for (Devenv d : list("", ak, sk, securityToken)) {
             if (d.id().equals(devStageId)) return d.status();
         }
         return null;
     }
 
-    public void start(String devStageId, String source, String ak, String sk) {
+    public void start(String devStageId, String source, String ak, String sk, String securityToken) {
         String body = "{\"source\":\"" + source + "\"}";
-        call("POST", "/open-api-public/v1/devenvs/" + devStageId + "/start", "", body, ak, sk);
+        call("POST", "/open-api-public/v1/devenvs/" + devStageId + "/start", "", body, ak, sk, securityToken);
     }
 
-    public void close(String devStageId, String source, String ak, String sk) {
+    public void close(String devStageId, String source, String ak, String sk, String securityToken) {
         String body = "{\"source\":\"" + source + "\"}";
-        call("POST", "/open-api-public/v1/devenvs/" + devStageId + "/close", "", body, ak, sk);
+        call("POST", "/open-api-public/v1/devenvs/" + devStageId + "/close", "", body, ak, sk, securityToken);
     }
 
-    public void delete(String devStageId, String source, String ak, String sk) {
-        call("DELETE", "/open-api-public/v1/devenvs/" + devStageId, "source=" + source, "", ak, sk);
+    public void delete(String devStageId, String source, String ak, String sk, String securityToken) {
+        call("DELETE", "/open-api-public/v1/devenvs/" + devStageId, "source=" + source, "", ak, sk, securityToken);
     }
 
-    public Connections connections(String devStageId, String source, String ak, String sk) {
+    public Connections connections(String devStageId, String source, String ak, String sk, String securityToken) {
         String body = "{\"source\":\"" + source + "\"}";
-        JsonNode r = call("POST", "/open-api-public/v1/devenvs/" + devStageId + "/connections", "", body, ak, sk);
+        JsonNode r = call("POST", "/open-api-public/v1/devenvs/" + devStageId + "/connections", "", body, ak, sk, securityToken);
         JsonNode result = r.path("result");
         long main = result.path("connection_id").asLong();
         List<Conn> list = new ArrayList<>();
@@ -125,23 +128,23 @@ public class DevStationClient {
         return new Connections(main, list);
     }
 
-    public ConnectionAddress address(String devStageId, long connectionId, String ak, String sk) {
+    public ConnectionAddress address(String devStageId, long connectionId, String ak, String sk, String securityToken) {
         JsonNode r = call("GET", "/open-api-public/v1/devenvs/" + devStageId
-                + "/connections/" + connectionId, "", "", ak, sk);
+                + "/connections/" + connectionId, "", "", ak, sk, securityToken);
         JsonNode info = r.path("result").path("connection_info");
         String url = info.path("url").asText();
         String source = info.path("extensions").path("source").asText();
         return new ConnectionAddress(url, source);
     }
 
-    public String autoConfig(String devStageId, boolean enableSts, String ak, String sk) {
+    public String autoConfig(String devStageId, boolean enableSts, String ak, String sk, String securityToken) {
         String body = "{\"instance_id\":\"" + devStageId + "\",\"enable_sts\":" + enableSts + "}";
-        JsonNode r = call("POST", "/open-api-public/v1/auto-config", "", body, ak, sk);
+        JsonNode r = call("POST", "/open-api-public/v1/auto-config", "", body, ak, sk, securityToken);
         return r.path("result").path("sts_expires_at").asText();
     }
 
-    public String realNameStatus(String ak, String sk) {
-        JsonNode r = call("GET", "/open-api-public/v1/realnames", "", "", ak, sk);
+    public String realNameStatus(String ak, String sk, String securityToken) {
+        JsonNode r = call("GET", "/open-api-public/v1/realnames", "", "", ak, sk, securityToken);
         JsonNode result = r.path("result");
         if (result.isArray() && result.size() > 0) {
             return result.get(0).path("realname_status").asText();
@@ -149,8 +152,8 @@ public class DevStationClient {
         return result.path("realname_status").asText();
     }
 
-    public List<Agreement> agreements(String ak, String sk) {
-        JsonNode r = call("GET", "/open-api-public/v1/agreements", "", "", ak, sk);
+    public List<Agreement> agreements(String ak, String sk, String securityToken) {
+        JsonNode r = call("GET", "/open-api-public/v1/agreements", "", "", ak, sk, securityToken);
         List<Agreement> out = new ArrayList<>();
         for (JsonNode item : r.path("result")) {
             out.add(new Agreement(
@@ -163,7 +166,7 @@ public class DevStationClient {
         return out;
     }
 
-    public void signAgreements(List<SignReq> list, String ak, String sk) {
+    public void signAgreements(List<SignReq> list, String ak, String sk, String securityToken) {
         var root = mapper.createObjectNode();
         var arr = root.putArray("sign_info_list");
         for (SignReq s : list) {
@@ -173,7 +176,7 @@ public class DevStationClient {
             o.put("language", s.language());
             o.put("version", s.version());
         }
-        call("POST", "/open-api-public/v1/agreements", "", root.toString(), ak, sk);
+        call("POST", "/open-api-public/v1/agreements", "", root.toString(), ak, sk, securityToken);
     }
 
     public record Devenv(String id, String name, String status) {}

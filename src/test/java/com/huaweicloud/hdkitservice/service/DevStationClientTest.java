@@ -49,7 +49,7 @@ class DevStationClientTest {
                         "{\"result\":{\"dev_stage_instance_id\":\"abc123\"},\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        String id = client.create("hcdktest1", "tpl", "flv", "WEB", Map.of(), Map.of(), "TESTAK", "TESTSK");
+        String id = client.create("hcdktest1", "tpl", "flv", "WEB", Map.of(), Map.of(), "TESTAK", "TESTSK", null);
         assertEquals("abc123", id);
         server.verify();
     }
@@ -64,7 +64,7 @@ class DevStationClientTest {
                                 + "\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        List<DevStationClient.Devenv> list = client.list("hcdktest1", "TESTAK", "TESTSK");
+        List<DevStationClient.Devenv> list = client.list("hcdktest1", "TESTAK", "TESTSK", null);
         assertEquals(1, list.size());
         assertEquals("abc123", list.get(0).id());
         assertEquals("cde.0004", list.get(0).status());
@@ -81,7 +81,7 @@ class DevStationClientTest {
                                 + "\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        assertEquals("cde.0002", client.statusOf("b2", "TESTAK", "TESTSK"));
+        assertEquals("cde.0002", client.statusOf("b2", "TESTAK", "TESTSK", null));
         server.verify();
     }
 
@@ -93,7 +93,7 @@ class DevStationClientTest {
                         "{\"result\":[],\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        assertNull(client.statusOf("missing", "TESTAK", "TESTSK"));
+        assertNull(client.statusOf("missing", "TESTAK", "TESTSK", null));
         server.verify();
     }
 
@@ -108,7 +108,7 @@ class DevStationClientTest {
                                 + "\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        DevStationClient.Connections conns = client.connections("dev1", "CLI", "TESTAK", "TESTSK");
+        DevStationClient.Connections conns = client.connections("dev1", "CLI", "TESTAK", "TESTSK", null);
         assertEquals(373117L, conns.connectionId());
         assertEquals(2, conns.list().size());
         server.verify();
@@ -124,7 +124,7 @@ class DevStationClientTest {
                                 + "\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        DevStationClient.ConnectionAddress addr = client.address("dev1", 100L, "TESTAK", "TESTSK");
+        DevStationClient.ConnectionAddress addr = client.address("dev1", 100L, "TESTAK", "TESTSK", null);
         assertEquals("wss://example/1", addr.url());
         assertEquals("-2074327356", addr.source());
         server.verify();
@@ -139,7 +139,7 @@ class DevStationClientTest {
                                 + "\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        assertEquals("2026-08-14T04:39:54Z", client.autoConfig("dev1", true, "TESTAK", "TESTSK"));
+        assertEquals("2026-08-14T04:39:54Z", client.autoConfig("dev1", true, "TESTAK", "TESTSK", null));
         server.verify();
     }
 
@@ -153,7 +153,7 @@ class DevStationClientTest {
                         MediaType.APPLICATION_JSON));
 
         DevStationClient.DevStationException ex = assertThrows(DevStationClient.DevStationException.class,
-                () -> client.create("n", "t", "f", "WEB", Map.of(), Map.of(), "TESTAK", "TESTSK"));
+                () -> client.create("n", "t", "f", "WEB", Map.of(), Map.of(), "TESTAK", "TESTSK", null));
         assertTrue(ex.getMessage().contains("HD.98320045"));
         server.verify();
     }
@@ -166,7 +166,7 @@ class DevStationClientTest {
                         "{\"result\":{\"realname_status\":\"2\"},\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        assertEquals("2", client.realNameStatus("TESTAK", "TESTSK"));
+        assertEquals("2", client.realNameStatus("TESTAK", "TESTSK", null));
         server.verify();
     }
 
@@ -182,7 +182,7 @@ class DevStationClientTest {
                                 + "\"error_msg\":\"success\",\"error_code\":\"0000\"}",
                         MediaType.APPLICATION_JSON));
 
-        List<DevStationClient.Agreement> list = client.agreements("TESTAK", "TESTSK");
+        List<DevStationClient.Agreement> list = client.agreements("TESTAK", "TESTSK", null);
         assertEquals(2, list.size());
         assertEquals("90102", list.get(0).agrType());
         assertEquals(3, list.get(0).signStatus());
@@ -201,7 +201,23 @@ class DevStationClientTest {
                         MediaType.APPLICATION_JSON));
 
         client.signAgreements(
-                List.of(new DevStationClient.SignReq("90102", "cn", "zh_cn", 2025062315L)), "TESTAK", "TESTSK");
+                List.of(new DevStationClient.SignReq("90102", "cn", "zh_cn", 2025062315L)), "TESTAK", "TESTSK", null);
+        server.verify();
+    }
+
+    @Test
+    void includesSecurityTokenHeaderForTemporaryCredentials() {
+        server.expect(requestTo("https://devstation.myhuaweicloud.com/open-api-public/v1/agreements"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-Security-Token", "TEMP-TOKEN"))
+                .andExpect(header("Authorization",
+                        org.hamcrest.Matchers.containsString("x-security-token")))
+                .andRespond(withSuccess(
+                        "{\"result\":[],\"error_msg\":\"success\",\"error_code\":\"0000\"}",
+                        MediaType.APPLICATION_JSON));
+
+        List<DevStationClient.Agreement> list = client.agreements("TESTAK", "TESTSK", "TEMP-TOKEN");
+        assertEquals(0, list.size());
         server.verify();
     }
 }

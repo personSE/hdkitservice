@@ -41,10 +41,9 @@ public class SandboxService {
         this.sandboxSessionRepo = sandboxSessionRepo;
     }
 
-    public ConnectResponse connect(ConnectRequest req, String ak, String sk) {
+public ConnectResponse connect(ConnectRequest req, String ak, String sk, String securityToken) {
         String akHash = sha256(ak);
         long start = System.currentTimeMillis();
-
         String templateId = (req.templateId() == null || req.templateId().isEmpty())
                 ? config.templateId() : req.templateId();
         String flavorId = (req.flavorId() == null || req.flavorId().isEmpty())
@@ -55,11 +54,11 @@ public class SandboxService {
         try {
             // 协议门禁：协议非最新版（sign_status==2 已签旧版）也视为未签署，
             // 否则上游 /open-api-public/v2/devenvs 会以 HD.83700031 拒绝，且异常被兜底打成 500 内部错误。
-            if (!allAgreementsSigned(devStation.agreements(ak, sk))) {
+            if (!allAgreementsSigned(devStation.agreements(ak, sk, securityToken))) {
                 throw new HdkitException("HDKIT_NOT_AGREEMENT", "用户未签署最新版协议，签署需由用户本人确认后完成", null);
             }
 
-            List<DevStationClient.Devenv> actual = devStation.list("", ak, sk);
+            List<DevStationClient.Devenv> actual = devStation.list("", ak, sk, securityToken);
             DevStationClient.Devenv existing = findHcdkInstance(actual);
 
             if (existing != null) {
@@ -72,19 +71,19 @@ public class SandboxService {
                 }
                 // 新建实例（name 内部生成，保证唯一可识别）
                 String name = "hcdk" + Long.toString(System.currentTimeMillis(), 36);
-                devStageId = devStation.create(name, templateId, flavorId, req.source(), req.env(), req.git(), ak, sk);
+                devStageId = devStation.create(name, templateId, flavorId, req.source(), req.env(), req.git(), ak, sk, securityToken);
                 created = true;
             }
 
             if (created) {
-                waitForStatus(devStageId, STATUS_READY, config.connectTimeout(), ak, sk);
+                waitForStatus(devStageId, STATUS_READY, config.connectTimeout(), ak, sk, securityToken);
             }
-            ensureRunning(devStageId, ak, sk);
-            devStation.autoConfig(devStageId, true, ak, sk); // 注入临时 AK/SK
+            ensureRunning(devStageId, ak, sk, securityToken);
+            devStation.autoConfig(devStageId, true, ak, sk, securityToken); // 注入临时 AK/SK
 
-            DevStationClient.Connections conns = devStation.connections(devStageId, config.source(), ak, sk);
+            DevStationClient.Connections conns = devStation.connections(devStageId, config.source(), ak, sk, securityToken);
             long connectionId = pickConnected(conns);
-            DevStationClient.ConnectionAddress addr = devStation.address(devStageId, connectionId, ak, sk);
+            DevStationClient.ConnectionAddress addr = devStation.address(devStageId, connectionId, ak, sk, securityToken);
             String address = addr.url() + "&source=" + addr.source();
 
             // 无本地会话：session_id 等价 dev_stage_id
@@ -102,7 +101,7 @@ public class SandboxService {
             // 上游/编排失败：暴露真实原因，避免被打成 500 内部错误
             log.error("[connect] upstream failed: {}", e.getMessage());
             if (created) {
-                try { releaseById(devStageId, ak, sk); } catch (Exception ex) {
+                try { releaseById(devStageId, ak, sk, securityToken); } catch (Exception ex) {
                     log.error("[connect] rollback release failed: {}", ex.getMessage());
                 }
             }
@@ -112,7 +111,7 @@ public class SandboxService {
                     "fail", "HDKIT_CONNECT_FAILED", System.currentTimeMillis() - start, templateId, flavorId);
             log.error("[connect] failed: {}", e.getMessage());
             if (created) {
-                try { releaseById(devStageId, ak, sk); } catch (Exception ex) {
+                try { releaseById(devStageId, ak, sk, securityToken); } catch (Exception ex) {
                     log.error("[connect] rollback release failed: {}", ex.getMessage());
                 }
             }
@@ -129,21 +128,21 @@ public class SandboxService {
         return null;
     }
 
-    private void ensureRunning(String devStageId, String ak, String sk) {
-        String status = devStation.statusOf(devStageId, ak, sk);
+    private void ensureRunning(String devStageId, String ak, String sk, String securityToken) {
+        String status = devStation.statusOf(devStageId, ak, sk, securityToken);
         if (!isStatus(status, STATUS_RUNNING)) {
-            devStation.start(devStageId, config.source(), ak, sk);
-            waitForStatus(devStageId, STATUS_RUNNING, config.connectTimeout(), ak, sk);
+            devStation.start(devStageId, config.source(), ak, sk, securityToken);
+            waitForStatus(devStageId, STATUS_RUNNING, config.connectTimeout(), ak, sk, securityToken);
         }
     }
 
-    public CredentialsResponse credentials(CredentialsRequest req, String ak, String sk) {
+    public CredentialsResponse credentials(CredentialsRequest req, String ak, String sk, String securityToken) {
         String devStageId = resolveDevStageId(req.sessionId(), req.devStageId());
         if (devStageId == null) {
             throw new HdkitException("HDKIT_INVALID_REQUEST", "缺少 session_id 或 dev_stage_id", null);
         }
 
-        String status = devStation.statusOf(devStageId, ak, sk);
+        String status = devStation.statusOf(devStageId, ak, sk, securityToken);
         if (status == null) {
             throw new HdkitException("HDKIT_SANDBOX_NOT_FOUND", "环境不存在或已被删除", null);
         }
@@ -152,12 +151,12 @@ public class SandboxService {
         }
 
         boolean enableSts = req.enableSts() == null || req.enableSts();
-        String expiresAt = devStation.autoConfig(devStageId, enableSts, ak, sk);
+        String expiresAt = devStation.autoConfig(devStageId, enableSts, ak, sk, securityToken);
 
         return new CredentialsResponse(devStageId, expiresAt);
     }
 
-    private void recordSession(String akHash, String devStageId, String action,
+private void recordSession(String akHash, String devStageId, String action,
                               String status, String errorCode, long durationMs,
                               String templateId, String flavorId) {
         try {
@@ -189,22 +188,22 @@ public class SandboxService {
         }
     }
 
-    private void releaseById(String devStageId, String ak, String sk) {
-        if (devStation.statusOf(devStageId, ak, sk) == null) {
+    private void releaseById(String devStageId, String ak, String sk, String securityToken) {
+        if (devStation.statusOf(devStageId, ak, sk, securityToken) == null) {
             return; // 幂等：环境已不存在，视为已释放
         }
-        devStation.close(devStageId, config.source(), ak, sk);
-        waitForStatus(devStageId, STATUS_READY, config.releaseTimeout(), ak, sk);
-        devStation.delete(devStageId, config.source(), ak, sk);
-        waitForGone(devStageId, config.releaseTimeout(), ak, sk);
+        devStation.close(devStageId, config.source(), ak, sk, securityToken);
+        waitForStatus(devStageId, STATUS_READY, config.releaseTimeout(), ak, sk, securityToken);
+        devStation.delete(devStageId, config.source(), ak, sk, securityToken);
+        waitForGone(devStageId, config.releaseTimeout(), ak, sk, securityToken);
     }
 
-    public CheckUserResponse checkUser(String ak, String sk) {
+    public CheckUserResponse checkUser(String ak, String sk, String securityToken) {
         Map<String, String> mdc = MDC.getCopyOfContextMap();
         CompletableFuture<Boolean> realnameFuture = CompletableFuture.supplyAsync(
-                () -> withMdc(mdc, () -> "2".equals(devStation.realNameStatus(ak, sk))));
+                () -> withMdc(mdc, () -> "2".equals(devStation.realNameStatus(ak, sk, securityToken))));
         CompletableFuture<Boolean> agreementFuture = CompletableFuture.supplyAsync(
-                () -> withMdc(mdc, () -> allAgreementsSigned(devStation.agreements(ak, sk))));
+                () -> withMdc(mdc, () -> allAgreementsSigned(devStation.agreements(ak, sk, securityToken))));
 
         boolean realnameOk = await(realnameFuture, "查询实名状态失败");
         boolean agreementOk = await(agreementFuture, "查询协议状态失败");
@@ -236,8 +235,8 @@ public class SandboxService {
         }
     }
 
-    public SignAgreementResponse signAgreement(String ak, String sk) {
-        List<DevStationClient.Agreement> agreements = devStation.agreements(ak, sk);
+    public SignAgreementResponse signAgreement(String ak, String sk, String securityToken) {
+        List<DevStationClient.Agreement> agreements = devStation.agreements(ak, sk, securityToken);
         List<DevStationClient.SignReq> toSign = new ArrayList<>();
         for (DevStationClient.Agreement a : agreements) {
             if (a.signStatus() == 2 || a.signStatus() == 3) {
@@ -245,7 +244,7 @@ public class SandboxService {
             }
         }
         if (!toSign.isEmpty()) {
-            devStation.signAgreements(toSign, ak, sk);
+            devStation.signAgreements(toSign, ak, sk, securityToken);
         }
         return new SignAgreementResponse(true, toSign.size());
     }
@@ -279,10 +278,10 @@ public class SandboxService {
         return conns.connectionId();
     }
 
-    private void waitForStatus(String devStageId, String target, long timeoutMs, String ak, String sk) {
+    private void waitForStatus(String devStageId, String target, long timeoutMs, String ak, String sk, String securityToken) {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
-            String status = devStation.statusOf(devStageId, ak, sk);
+            String status = devStation.statusOf(devStageId, ak, sk, securityToken);
             if (isStatus(status, target)) return;
             sleep(config.pollIntervalMs());
         }
@@ -295,10 +294,10 @@ public class SandboxService {
         return (dot >= 0 ? actual.substring(dot + 1) : actual).equals(code);
     }
 
-    private void waitForGone(String devStageId, long timeoutMs, String ak, String sk) {
+    private void waitForGone(String devStageId, long timeoutMs, String ak, String sk, String securityToken) {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
-            if (devStation.statusOf(devStageId, ak, sk) == null) return;
+            if (devStation.statusOf(devStageId, ak, sk, securityToken) == null) return;
             sleep(config.pollIntervalMs());
         }
         throw new HdkitException("HDKIT_RELEASE_TIMEOUT", "等待释放完成超时", null);

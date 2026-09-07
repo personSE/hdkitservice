@@ -7,6 +7,7 @@ import com.huaweicloud.hdkitservice.model.ConnectResponse;
 import com.huaweicloud.hdkitservice.model.CredentialsRequest;
 import com.huaweicloud.hdkitservice.model.CredentialsResponse;
 import com.huaweicloud.hdkitservice.model.SignAgreementResponse;
+import com.huaweicloud.hdkitservice.repository.SandboxSessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -43,9 +44,9 @@ class SandboxServiceTest {
         config.setConnectTimeout(1000);
         config.setReleaseTimeout(1000);
         config.setMaxConcurrent(5);
-        service = new SandboxService(devStation, config);
+        service = new SandboxService(devStation, config, org.mockito.Mockito.mock(SandboxSessionRepository.class));
         // connect 前置协议门禁：默认已签最新版协议
-        when(devStation.agreements("AK", "SK")).thenReturn(signedAgreements());
+        when(devStation.agreements("AK", "SK", null)).thenReturn(signedAgreements());
     }
 
     private static List<DevStationClient.Agreement> signedAgreements() {
@@ -56,40 +57,40 @@ class SandboxServiceTest {
 
     @Test
     void connectCreatesNewInstanceWhenNoneExists() {
-        when(devStation.list("", "AK", "SK")).thenReturn(List.of());
-        when(devStation.create(any(), eq("tpl"), eq("flv"), any(), any(), any(), eq("AK"), eq("SK")))
+        when(devStation.list("", "AK", "SK", null)).thenReturn(List.of());
+        when(devStation.create(any(), eq("tpl"), eq("flv"), any(), any(), any(), eq("AK"), eq("SK"), any()))
                 .thenReturn("dev1");
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0004", "cde.0004", "cde.0002");
-        when(devStation.connections("dev1", "CLI", "AK", "SK"))
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0004", "cde.0004", "cde.0002");
+        when(devStation.connections("dev1", "CLI", "AK", "SK", null))
                 .thenReturn(new DevStationClient.Connections(100L,
                         List.of(new DevStationClient.Conn(100L, "CONNECTED"))));
-        when(devStation.address("dev1", 100L, "AK", "SK"))
+        when(devStation.address("dev1", 100L, "AK", "SK", null))
                 .thenReturn(new DevStationClient.ConnectionAddress("wss://example/1", "-2074327356"));
 
         ConnectResponse resp = service.connect(
-                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK");
+                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null);
 
         assertEquals("dev1", resp.devStageId());
         assertEquals("dev1", resp.sessionId()); // session_id 等价 dev_stage_id
         assertEquals("wss://example/1&source=-2074327356", resp.connectionAddress());
         assertEquals("connected", resp.status());
-        verify(devStation).autoConfig("dev1", true, "AK", "SK");
+        verify(devStation).autoConfig("dev1", true, "AK", "SK", null);
     }
 
     @Test
     void connectPicksConnectedConnectionFromList() {
-        when(devStation.list("", "AK", "SK")).thenReturn(List.of());
-        when(devStation.create(any(), any(), any(), any(), any(), any(), any(), any())).thenReturn("dev1");
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0004", "cde.0004", "cde.0002");
-        when(devStation.connections("dev1", "CLI", "AK", "SK"))
+        when(devStation.list("", "AK", "SK", null)).thenReturn(List.of());
+        when(devStation.create(any(), any(), any(), any(), any(), any(), any(), any(), any())).thenReturn("dev1");
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0004", "cde.0004", "cde.0002");
+        when(devStation.connections("dev1", "CLI", "AK", "SK", null))
                 .thenReturn(new DevStationClient.Connections(111L, List.of(
                         new DevStationClient.Conn(111L, "CONNECTING"),
                         new DevStationClient.Conn(222L, "CONNECTED"))));
-        when(devStation.address("dev1", 222L, "AK", "SK"))
+        when(devStation.address("dev1", 222L, "AK", "SK", null))
                 .thenReturn(new DevStationClient.ConnectionAddress("wss://example/2", "-2074327356"));
 
         ConnectResponse resp = service.connect(
-                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK");
+                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null);
 
         assertEquals("222", resp.connectionId());
         assertEquals("wss://example/2&source=-2074327356", resp.connectionAddress());
@@ -97,24 +98,24 @@ class SandboxServiceTest {
 
     @Test
     void connectUsesRequestTemplateAndFlavorOverride() {
-        when(devStation.list("", "AK", "SK")).thenReturn(List.of());
-        when(devStation.create(any(), eq("customTpl"), eq("customFlv"), any(), any(), any(), eq("AK"), eq("SK")))
+        when(devStation.list("", "AK", "SK", null)).thenReturn(List.of());
+        when(devStation.create(any(), eq("customTpl"), eq("customFlv"), any(), any(), any(), eq("AK"), eq("SK"), any()))
                 .thenReturn("dev1");
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0004", "cde.0004", "cde.0002");
-        when(devStation.connections("dev1", "CLI", "AK", "SK"))
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0004", "cde.0004", "cde.0002");
+        when(devStation.connections("dev1", "CLI", "AK", "SK", null))
                 .thenReturn(new DevStationClient.Connections(100L,
                         List.of(new DevStationClient.Conn(100L, "CONNECTED"))));
-        when(devStation.address("dev1", 100L, "AK", "SK"))
+        when(devStation.address("dev1", 100L, "AK", "SK", null))
                 .thenReturn(new DevStationClient.ConnectionAddress("wss://x", "-2074327356"));
 
-        service.connect(new ConnectRequest(null, "customTpl", "customFlv", null, Map.of(), Map.of()), "AK", "SK");
+        service.connect(new ConnectRequest(null, "customTpl", "customFlv", null, Map.of(), Map.of()), "AK", "SK", null);
 
-        verify(devStation).create(any(), eq("customTpl"), eq("customFlv"), any(), any(), any(), eq("AK"), eq("SK"));
+        verify(devStation).create(any(), eq("customTpl"), eq("customFlv"), any(), any(), any(), eq("AK"), eq("SK"), any());
     }
 
     @Test
     void connectThrowsConflictWhenAccountEnvCountAtLimit() {
-        when(devStation.list("", "AK", "SK")).thenReturn(List.of(
+        when(devStation.list("", "AK", "SK", null)).thenReturn(List.of(
                 new DevStationClient.Devenv("m1", "manual1", "cde.0002"),
                 new DevStationClient.Devenv("m2", "manual2", "cde.0004"),
                 new DevStationClient.Devenv("m3", "manual3", "cde.0004"),
@@ -122,127 +123,127 @@ class SandboxServiceTest {
                 new DevStationClient.Devenv("m5", "manual5", "cde.0004")));
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK"));
+                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null));
         assertEquals("HDKIT_CONFLICT", ex.code());
-        verify(devStation, never()).create(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(devStation, never()).create(any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void connectCreatesWhenAccountEnvCountBelowLimit() {
-        when(devStation.list("", "AK", "SK")).thenReturn(List.of(
+        when(devStation.list("", "AK", "SK", null)).thenReturn(List.of(
                 new DevStationClient.Devenv("m1", "manual1", "cde.0002"),
                 new DevStationClient.Devenv("m2", "manual2", "cde.0004")));
-        when(devStation.create(any(), any(), any(), any(), any(), any(), eq("AK"), eq("SK"))).thenReturn("dev1");
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0004", "cde.0004", "cde.0002");
-        when(devStation.connections("dev1", "CLI", "AK", "SK"))
+        when(devStation.create(any(), any(), any(), any(), any(), any(), eq("AK"), eq("SK"), any())).thenReturn("dev1");
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0004", "cde.0004", "cde.0002");
+        when(devStation.connections("dev1", "CLI", "AK", "SK", null))
                 .thenReturn(new DevStationClient.Connections(100L,
                         List.of(new DevStationClient.Conn(100L, "CONNECTED"))));
-        when(devStation.address("dev1", 100L, "AK", "SK"))
+        when(devStation.address("dev1", 100L, "AK", "SK", null))
                 .thenReturn(new DevStationClient.ConnectionAddress("wss://x", "-1"));
 
         ConnectResponse resp = service.connect(
-                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK");
+                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null);
 
         assertEquals("dev1", resp.devStageId());
-        verify(devStation).create(any(), any(), any(), any(), any(), any(), eq("AK"), eq("SK"));
+        verify(devStation).create(any(), any(), any(), any(), any(), any(), eq("AK"), eq("SK"), any());
     }
 
     @Test
     void connectFailureAfterCreateRollsBackRelease() {
-        when(devStation.list("", "AK", "SK")).thenReturn(List.of());
-        when(devStation.create(any(), any(), any(), any(), any(), any(), eq("AK"), eq("SK"))).thenReturn("dev1");
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0004", "cde.0004", "cde.0004", "cde.0004", null);
-        doThrow(new RuntimeException("start boom")).when(devStation).start("dev1", "CLI", "AK", "SK");
+        when(devStation.list("", "AK", "SK", null)).thenReturn(List.of());
+        when(devStation.create(any(), any(), any(), any(), any(), any(), eq("AK"), eq("SK"), any())).thenReturn("dev1");
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0004", "cde.0004", "cde.0004", "cde.0004", null);
+        doThrow(new RuntimeException("start boom")).when(devStation).start("dev1", "CLI", "AK", "SK", null);
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK"));
+                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null));
         assertEquals("HDKIT_CONNECT_FAILED", ex.code());
-        verify(devStation).close("dev1", "CLI", "AK", "SK");
-        verify(devStation).delete("dev1", "CLI", "AK", "SK");
+        verify(devStation).close("dev1", "CLI", "AK", "SK", null);
+        verify(devStation).delete("dev1", "CLI", "AK", "SK", null);
     }
 
     // ── connect: 复用已有实例 ──
 
     @Test
     void connectReusesExistingStoppedInstance() {
-        when(devStation.list("", "AK", "SK"))
+        when(devStation.list("", "AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Devenv("dev1", "hcdkabc", "cde.0004")));
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0004", "cde.0002");
-        when(devStation.connections("dev1", "CLI", "AK", "SK"))
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0004", "cde.0002");
+        when(devStation.connections("dev1", "CLI", "AK", "SK", null))
                 .thenReturn(new DevStationClient.Connections(200L,
                         List.of(new DevStationClient.Conn(200L, "CONNECTED"))));
-        when(devStation.address("dev1", 200L, "AK", "SK"))
+        when(devStation.address("dev1", 200L, "AK", "SK", null))
                 .thenReturn(new DevStationClient.ConnectionAddress("wss://example/reuse", "-2074327356"));
 
         ConnectResponse resp = service.connect(
-                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK");
+                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null);
 
         assertEquals("dev1", resp.devStageId());
         assertEquals("dev1", resp.sessionId());
         assertEquals("wss://example/reuse&source=-2074327356", resp.connectionAddress());
-        verify(devStation, never()).create(any(), any(), any(), any(), any(), any(), any(), any());
-        verify(devStation).start("dev1", "CLI", "AK", "SK");
-        verify(devStation).autoConfig("dev1", true, "AK", "SK");
+        verify(devStation, never()).create(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        verify(devStation).start("dev1", "CLI", "AK", "SK", null);
+        verify(devStation).autoConfig("dev1", true, "AK", "SK", null);
     }
 
     @Test
     void connectReusesRunningInstanceWithoutStart() {
-        when(devStation.list("", "AK", "SK"))
+        when(devStation.list("", "AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Devenv("dev1", "hcdkabc", "cde.0002")));
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0002");
-        when(devStation.connections("dev1", "CLI", "AK", "SK"))
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0002");
+        when(devStation.connections("dev1", "CLI", "AK", "SK", null))
                 .thenReturn(new DevStationClient.Connections(200L,
                         List.of(new DevStationClient.Conn(200L, "CONNECTED"))));
-        when(devStation.address("dev1", 200L, "AK", "SK"))
+        when(devStation.address("dev1", 200L, "AK", "SK", null))
                 .thenReturn(new DevStationClient.ConnectionAddress("wss://example/reuse", "-2074327356"));
 
         ConnectResponse resp = service.connect(
-                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK");
+                new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null);
 
         assertEquals("dev1", resp.devStageId());
-        verify(devStation, never()).start(any(), any(), any(), any());
-        verify(devStation).autoConfig("dev1", true, "AK", "SK");
+        verify(devStation, never()).start(any(), any(), any(), any(), any());
+        verify(devStation).autoConfig("dev1", true, "AK", "SK", null);
     }
 
     @Test
     void connectReuseFailureDoesNotReleaseExisting() {
-        when(devStation.list("", "AK", "SK"))
+        when(devStation.list("", "AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Devenv("dev1", "hcdkabc", "cde.0002")));
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0002");
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0002");
         doThrow(new DevStationClient.DevStationException("auto-config failed", null))
-                .when(devStation).autoConfig("dev1", true, "AK", "SK");
+                .when(devStation).autoConfig("dev1", true, "AK", "SK", null);
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK"));
+                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null));
         assertEquals("HDKIT_UPSTREAM_ERROR", ex.code());
         // 复用实例失败不应释放用户已有沙箱
-        verify(devStation, never()).close(any(), any(), any(), any());
-        verify(devStation, never()).delete(any(), any(), any(), any());
+        verify(devStation, never()).close(any(), any(), any(), any(), any());
+        verify(devStation, never()).delete(any(), any(), any(), any(), any());
     }
 
     // ── connect: 协议门禁 & 上游错误映射 ──
 
     @Test
     void connectOutdatedAgreementThrowsNotAgreement() {
-        when(devStation.agreements("AK", "SK"))
+        when(devStation.agreements("AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Agreement("90142", "cn", "zh_cn", 2, 2026081706L)));
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK"));
+                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null));
         assertEquals("HDKIT_NOT_AGREEMENT", ex.code());
         // 协议不过关时不应触碰实例创建
-        verify(devStation, never()).list(any(), any(), any());
-        verify(devStation, never()).create(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(devStation, never()).list(any(), any(), any(), any());
+        verify(devStation, never()).create(any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
     void connectUpstreamListErrorThrowsUpstreamError() {
         doThrow(new DevStationClient.DevStationException("GET /open-api-public/v2/devenvs upstream error "
                 + "HD.83700031: the account not sign agreement", null))
-                .when(devStation).list("", "AK", "SK");
+                .when(devStation).list("", "AK", "SK", null);
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK"));
+                () -> service.connect(new ConnectRequest(null, null, null, null, Map.of(), Map.of()), "AK", "SK", null));
         assertEquals("HDKIT_UPSTREAM_ERROR", ex.code());
         assertTrue(ex.getMessage().contains("HD.83700031"));
     }
@@ -251,10 +252,10 @@ class SandboxServiceTest {
 
     @Test
     void credentialsWithDevStageIdReturnsExpiryAndSession() {
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0002");
-        when(devStation.autoConfig("dev1", true, "AK", "SK")).thenReturn("2026-08-14T04:39:54Z");
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0002");
+        when(devStation.autoConfig("dev1", true, "AK", "SK", null)).thenReturn("2026-08-14T04:39:54Z");
 
-        CredentialsResponse resp = service.credentials(new CredentialsRequest(null, "dev1", true), "AK", "SK");
+        CredentialsResponse resp = service.credentials(new CredentialsRequest(null, "dev1", true), "AK", "SK", null);
 
         assertEquals("2026-08-14T04:39:54Z", resp.expiresAt());
         assertEquals("dev1", resp.sessionId()); // session_id 等价 dev_stage_id
@@ -262,10 +263,10 @@ class SandboxServiceTest {
 
     @Test
     void credentialsTreatsSessionIdAsDevStageId() {
-        when(devStation.statusOf("s1", "AK", "SK")).thenReturn("cde.0002");
-        when(devStation.autoConfig("s1", true, "AK", "SK")).thenReturn("expiry");
+        when(devStation.statusOf("s1", "AK", "SK", null)).thenReturn("cde.0002");
+        when(devStation.autoConfig("s1", true, "AK", "SK", null)).thenReturn("expiry");
 
-        CredentialsResponse resp = service.credentials(new CredentialsRequest("s1", null, null), "AK", "SK");
+        CredentialsResponse resp = service.credentials(new CredentialsRequest("s1", null, null), "AK", "SK", null);
 
         assertEquals("expiry", resp.expiresAt());
         assertEquals("s1", resp.sessionId());
@@ -273,28 +274,28 @@ class SandboxServiceTest {
 
     @Test
     void credentialsEnvGoneThrowsNotFound() {
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn(null);
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn(null);
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.credentials(new CredentialsRequest(null, "dev1", true), "AK", "SK"));
+                () -> service.credentials(new CredentialsRequest(null, "dev1", true), "AK", "SK", null));
         assertEquals("HDKIT_SANDBOX_NOT_FOUND", ex.code());
-        verify(devStation, never()).autoConfig(any(), anyBoolean(), any(), any());
+        verify(devStation, never()).autoConfig(any(), anyBoolean(), any(), any(), any());
     }
 
     @Test
     void credentialsNotRunningThrows() {
-        when(devStation.statusOf("dev1", "AK", "SK")).thenReturn("cde.0004");
+        when(devStation.statusOf("dev1", "AK", "SK", null)).thenReturn("cde.0004");
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.credentials(new CredentialsRequest(null, "dev1", true), "AK", "SK"));
+                () -> service.credentials(new CredentialsRequest(null, "dev1", true), "AK", "SK", null));
         assertEquals("HDKIT_NOT_RUNNING", ex.code());
-        verify(devStation, never()).autoConfig(any(), anyBoolean(), any(), any());
+        verify(devStation, never()).autoConfig(any(), anyBoolean(), any(), any(), any());
     }
 
     @Test
     void credentialsMissingIdsThrows() {
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.credentials(new CredentialsRequest(null, null, true), "AK", "SK"));
+                () -> service.credentials(new CredentialsRequest(null, null, true), "AK", "SK", null));
         assertEquals("HDKIT_INVALID_REQUEST", ex.code());
     }
 
@@ -302,74 +303,74 @@ class SandboxServiceTest {
 
     @Test
     void checkUserHappyPathAlwaysQueriesUpstream() {
-        when(devStation.realNameStatus("AK", "SK")).thenReturn("2");
-        when(devStation.agreements("AK", "SK"))
+        when(devStation.realNameStatus("AK", "SK", null)).thenReturn("2");
+        when(devStation.agreements("AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Agreement("90102", "cn", "zh_cn", 1, 2025062315L)));
 
-        CheckUserResponse resp = service.checkUser("AK", "SK");
+        CheckUserResponse resp = service.checkUser("AK", "SK", null);
 
         assertTrue(resp.realnameVerified());
         assertTrue(resp.agreementSigned());
         // 不再有缓存，每次都必须实时查询上游
-        verify(devStation).realNameStatus("AK", "SK");
-        verify(devStation).agreements("AK", "SK");
+        verify(devStation).realNameStatus("AK", "SK", null);
+        verify(devStation).agreements("AK", "SK", null);
     }
 
     @Test
     void checkUserNotRealnameThrows() {
-        when(devStation.realNameStatus("AK", "SK")).thenReturn("0");
-        when(devStation.agreements("AK", "SK"))
+        when(devStation.realNameStatus("AK", "SK", null)).thenReturn("0");
+        when(devStation.agreements("AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Agreement("90102", "cn", "zh_cn", 1, 2025062315L)));
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.checkUser("AK", "SK"));
+                () -> service.checkUser("AK", "SK", null));
         assertEquals("HDKIT_NOT_REALNAME", ex.code());
     }
 
     @Test
     void checkUserNotAgreementThrows() {
-        when(devStation.realNameStatus("AK", "SK")).thenReturn("2");
-        when(devStation.agreements("AK", "SK"))
+        when(devStation.realNameStatus("AK", "SK", null)).thenReturn("2");
+        when(devStation.agreements("AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Agreement("90102", "cn", "zh_cn", 3, 2025062315L)));
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.checkUser("AK", "SK"));
+                () -> service.checkUser("AK", "SK", null));
         assertEquals("HDKIT_NOT_AGREEMENT", ex.code());
     }
 
     @Test
     void checkUserOutdatedAgreementThrows() {
-        when(devStation.realNameStatus("AK", "SK")).thenReturn("2");
-        when(devStation.agreements("AK", "SK"))
+        when(devStation.realNameStatus("AK", "SK", null)).thenReturn("2");
+        when(devStation.agreements("AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Agreement("90142", "cn", "zh_cn", 2, 2026081706L)));
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.checkUser("AK", "SK"));
+                () -> service.checkUser("AK", "SK", null));
         assertEquals("HDKIT_NOT_AGREEMENT", ex.code());
     }
 
     @Test
     void checkUserBothMissingThrowsCombinedCode() {
-        when(devStation.realNameStatus("AK", "SK")).thenReturn("0");
-        when(devStation.agreements("AK", "SK"))
+        when(devStation.realNameStatus("AK", "SK", null)).thenReturn("0");
+        when(devStation.agreements("AK", "SK", null))
                 .thenReturn(List.of(new DevStationClient.Agreement("90142", "cn", "zh_cn", 2, 2026081706L)));
 
         SandboxService.HdkitException ex = assertThrows(SandboxService.HdkitException.class,
-                () -> service.checkUser("AK", "SK"));
+                () -> service.checkUser("AK", "SK", null));
         assertEquals("HDKIT_NOT_REALNAME_AND_AGREEMENT", ex.code());
     }
 
     @Test
     void signAgreementSignsOnlyUnsigned() {
-        when(devStation.agreements("AK", "SK")).thenReturn(List.of(
+        when(devStation.agreements("AK", "SK", null)).thenReturn(List.of(
                 new DevStationClient.Agreement("90102", "cn", "zh_cn", 3, 2025062315L),
                 new DevStationClient.Agreement("90142", "cn", "zh_cn", 1, 2026060305L)));
 
-        SignAgreementResponse resp = service.signAgreement("AK", "SK");
+        SignAgreementResponse resp = service.signAgreement("AK", "SK", null);
 
         assertTrue(resp.signed());
         assertEquals(1, resp.signedCount());
         verify(devStation).signAgreements(argThat(l -> l.size() == 1
-                && "90102".equals(l.get(0).agrType())), eq("AK"), eq("SK"));
+                && "90102".equals(l.get(0).agrType())), eq("AK"), eq("SK"), any());
     }
 }
