@@ -6,12 +6,17 @@ import com.huaweicloud.hdkitservice.model.ConnectRequest;
 import com.huaweicloud.hdkitservice.model.ConnectResponse;
 import com.huaweicloud.hdkitservice.model.CredentialsRequest;
 import com.huaweicloud.hdkitservice.model.CredentialsResponse;
+import com.huaweicloud.hdkitservice.model.SandboxSession;
 import com.huaweicloud.hdkitservice.model.SignAgreementResponse;
+import com.huaweicloud.hdkitservice.repository.SandboxSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -27,13 +32,19 @@ public class SandboxService {
 
     private final DevStationClient devStation;
     private final HdkitConfig config;
+    private final SandboxSessionRepository sandboxSessionRepo;
 
-    public SandboxService(DevStationClient devStation, HdkitConfig config) {
+    public SandboxService(DevStationClient devStation, HdkitConfig config,
+                          SandboxSessionRepository sandboxSessionRepo) {
         this.devStation = devStation;
         this.config = config;
+        this.sandboxSessionRepo = sandboxSessionRepo;
     }
 
     public ConnectResponse connect(ConnectRequest req, String ak, String sk) {
+        String akHash = sha256(ak);
+        long start = System.currentTimeMillis();
+
         String templateId = (req.templateId() == null || req.templateId().isEmpty())
                 ? config.templateId() : req.templateId();
         String flavorId = (req.flavorId() == null || req.flavorId().isEmpty())
@@ -77,11 +88,17 @@ public class SandboxService {
             String address = addr.url() + "&source=" + addr.source();
 
             // 无本地会话：session_id 等价 dev_stage_id
+            recordSession(akHash, devStageId, created ? "create" : "reuse",
+                    "success", null, System.currentTimeMillis() - start, templateId, flavorId);
             return new ConnectResponse(devStageId, devStageId, String.valueOf(connectionId), address, "connected");
         } catch (HdkitException e) {
+            recordSession(akHash, devStageId, created ? "create" : "reuse",
+                    "fail", e.code(), System.currentTimeMillis() - start, templateId, flavorId);
             // 业务异常原样抛出（HDKIT_NOT_AGREEMENT / HDKIT_CONFLICT），不被吞成通用错误
             throw e;
         } catch (DevStationClient.DevStationException e) {
+            recordSession(akHash, devStageId, created ? "create" : "reuse",
+                    "fail", "HDKIT_UPSTREAM_ERROR", System.currentTimeMillis() - start, templateId, flavorId);
             // 上游/编排失败：暴露真实原因，避免被打成 500 内部错误
             log.error("[connect] upstream failed: {}", e.getMessage());
             if (created) {
@@ -91,6 +108,8 @@ public class SandboxService {
             }
             throw new HdkitException("HDKIT_UPSTREAM_ERROR", "沙箱编排上游调用失败: " + e.getMessage(), e);
         } catch (Exception e) {
+            recordSession(akHash, devStageId, created ? "create" : "reuse",
+                    "fail", "HDKIT_CONNECT_FAILED", System.currentTimeMillis() - start, templateId, flavorId);
             log.error("[connect] failed: {}", e.getMessage());
             if (created) {
                 try { releaseById(devStageId, ak, sk); } catch (Exception ex) {
@@ -136,6 +155,38 @@ public class SandboxService {
         String expiresAt = devStation.autoConfig(devStageId, enableSts, ak, sk);
 
         return new CredentialsResponse(devStageId, expiresAt);
+    }
+
+    private void recordSession(String akHash, String devStageId, String action,
+                              String status, String errorCode, long durationMs,
+                              String templateId, String flavorId) {
+        try {
+            SandboxSession session = new SandboxSession();
+            session.setAkHash(akHash);
+            session.setDevStageId(devStageId);
+            session.setAction(action);
+            session.setStatus(status);
+            session.setDurationMs(durationMs);
+            session.setTemplateId(templateId);
+            session.setFlavorId(flavorId);
+            session.setErrorCode(errorCode);
+            session.setCreatedAt(LocalDateTime.now());
+            sandboxSessionRepo.save(session);
+        } catch (Exception e) {
+            log.warn("[sandbox] recordSession failed: {}", e.getMessage());
+        }
+    }
+
+    private static String sha256(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 
     private void releaseById(String devStageId, String ak, String sk) {

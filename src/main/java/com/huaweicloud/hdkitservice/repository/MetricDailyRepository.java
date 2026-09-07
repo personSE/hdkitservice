@@ -19,6 +19,9 @@ public interface MetricDailyRepository extends JpaRepository<MetricDaily, PK> {
     @Query("SELECT m FROM MetricDaily m WHERE m.metricKey = :key AND m.metricDate >= :startDate ORDER BY m.metricDate")
     List<MetricDaily> findByKeySince(@Param("key") String key, @Param("startDate") LocalDate startDate);
 
+    @Query("SELECT m FROM MetricDaily m WHERE m.metricKey = :key AND m.metricDate >= :startDate AND m.metricDate <= :endDate ORDER BY m.metricDate")
+    List<MetricDaily> findByKeyBetween(@Param("key") String key, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
     @Query("SELECT m FROM MetricDaily m WHERE m.metricKey = :key ORDER BY m.metricDate DESC LIMIT 1")
     Optional<MetricDaily> findLatestByKey(@Param("key") String key);
 }

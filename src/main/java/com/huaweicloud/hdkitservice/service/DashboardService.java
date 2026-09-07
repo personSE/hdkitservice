@@ -12,9 +12,12 @@ import com.huaweicloud.hdkitservice.model.CapabilitySummaryDTO;
 import com.huaweicloud.hdkitservice.model.CapabilityTrendDTO;
 import com.huaweicloud.hdkitservice.model.DeveloperSummaryDTO;
 import com.huaweicloud.hdkitservice.model.DeveloperTrendDTO;
+import com.huaweicloud.hdkitservice.model.DownloadChannelDistributionDTO;
+import com.huaweicloud.hdkitservice.model.DownloadChannelSummaryDTO;
 import com.huaweicloud.hdkitservice.model.DownloadSummaryDTO;
 import com.huaweicloud.hdkitservice.model.DownloadTrendDTO;
 import com.huaweicloud.hdkitservice.model.MetricDaily;
+import com.huaweicloud.hdkitservice.model.NewUserTrendDTO;
 import com.huaweicloud.hdkitservice.model.NpmDownloadStats;
 import com.huaweicloud.hdkitservice.model.SandboxDurationBucketDaily;
 import com.huaweicloud.hdkitservice.model.SandboxDurationDTO;
@@ -36,10 +39,12 @@ import com.huaweicloud.hdkitservice.repository.MetricDailyRepository;
 import com.huaweicloud.hdkitservice.repository.NpmDownloadStatsRepository;
 import com.huaweicloud.hdkitservice.repository.SandboxDurationBucketDailyRepository;
 import com.huaweicloud.hdkitservice.repository.SandboxHourlyStatsRepository;
+import com.huaweicloud.hdkitservice.repository.SandboxSessionRepository;
 import com.huaweicloud.hdkitservice.repository.SkillDailyStatsRepository;
 import com.huaweicloud.hdkitservice.repository.TelemetryEventRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherClaimLogRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherFaceValueDailyRepository;
+import com.huaweicloud.hdkitservice.repository.VoucherRecordRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -75,8 +80,10 @@ public class DashboardService {
     private final ActivityStatsSnapshotRepository activitySnapshotRepo;
     private final VoucherClaimLogRepository voucherClaimLogRepo;
     private final VoucherFaceValueDailyRepository voucherFaceValueRepo;
+    private final VoucherRecordRepository voucherRecordRepo;
     private final SandboxDurationBucketDailyRepository sandboxBucketRepo;
     private final SandboxHourlyStatsRepository sandboxHourlyRepo;
+    private final SandboxSessionRepository sandboxSessionRepo;
 
     public DashboardService(MetricDailyRepository metricRepo,
                             AgentDistributionDailyRepository agentRepo,
@@ -87,8 +94,10 @@ public class DashboardService {
                             ActivityStatsSnapshotRepository activitySnapshotRepo,
                             VoucherClaimLogRepository voucherClaimLogRepo,
                             VoucherFaceValueDailyRepository voucherFaceValueRepo,
+                            VoucherRecordRepository voucherRecordRepo,
                             SandboxDurationBucketDailyRepository sandboxBucketRepo,
-                            SandboxHourlyStatsRepository sandboxHourlyRepo) {
+                            SandboxHourlyStatsRepository sandboxHourlyRepo,
+                            SandboxSessionRepository sandboxSessionRepo) {
         this.metricRepo = metricRepo;
         this.agentRepo = agentRepo;
         this.npmRepo = npmRepo;
@@ -98,8 +107,10 @@ public class DashboardService {
         this.activitySnapshotRepo = activitySnapshotRepo;
         this.voucherClaimLogRepo = voucherClaimLogRepo;
         this.voucherFaceValueRepo = voucherFaceValueRepo;
+        this.voucherRecordRepo = voucherRecordRepo;
         this.sandboxBucketRepo = sandboxBucketRepo;
         this.sandboxHourlyRepo = sandboxHourlyRepo;
+        this.sandboxSessionRepo = sandboxSessionRepo;
     }
 
     public DeveloperSummaryDTO getDeveloperSummary() {
@@ -160,7 +171,87 @@ public class DashboardService {
             total += s.getDailyDownloads();
         }
 
-        return new DownloadTrendDTO(npmDaily, total);
+        return new DownloadTrendDTO(npmDaily, total, List.of());
+    }
+
+    public NewUserTrendDTO getNewUserTrend() {
+        LocalDate today = LocalDate.now();
+        List<NewUserTrendDTO.MonthPoint> months = new ArrayList<>();
+
+        for (int i = 5; i >= 0; i--) {
+            LocalDate monthDate = today.minusMonths(i);
+            int year = monthDate.getYear();
+            int month = monthDate.getMonthValue();
+            String monthStr = year + "-" + String.format("%02d", month);
+
+            LocalDate monthStart = LocalDate.of(year, month, 1);
+            LocalDate monthEnd = monthStart.plusMonths(1);
+
+            List<MetricDaily> metrics = metricRepo.findByKeyBetween(KEY_NEW_USERS, monthStart, monthEnd.minusDays(1));
+            long newUserCount = metrics.stream()
+                    .mapToLong(m -> m.getMetricValue() != null ? m.getMetricValue() : 0)
+                    .sum();
+
+            Double momRate = null;
+            if (i < 5) {
+                LocalDate prevMonthStart = monthStart.minusMonths(1);
+                List<MetricDaily> prevMetrics = metricRepo.findByKeyBetween(KEY_NEW_USERS, prevMonthStart, monthStart.minusDays(1));
+                long prevCount = prevMetrics.stream()
+                        .mapToLong(m -> m.getMetricValue() != null ? m.getMetricValue() : 0)
+                        .sum();
+                if (prevCount > 0) {
+                    momRate = round1((double) (newUserCount - prevCount) / prevCount * 100);
+                } else if (newUserCount > 0) {
+                    momRate = 100.0;
+                }
+            }
+
+            Double yoyRate = null;
+            LocalDate lastYearStart = monthStart.minusYears(1);
+            List<MetricDaily> lastYearMetrics = metricRepo.findByKeyBetween(KEY_NEW_USERS, lastYearStart, lastYearStart.plusMonths(1).minusDays(1));
+            long lastYearCount = lastYearMetrics.stream()
+                    .mapToLong(m -> m.getMetricValue() != null ? m.getMetricValue() : 0)
+                    .sum();
+            if (lastYearCount > 0) {
+                yoyRate = round1((double) (newUserCount - lastYearCount) / lastYearCount * 100);
+            }
+
+            months.add(new NewUserTrendDTO.MonthPoint(monthStr, newUserCount, momRate, yoyRate));
+        }
+
+        return new NewUserTrendDTO(months);
+    }
+
+    public DownloadChannelSummaryDTO getDownloadChannelSummary() {
+        Optional<NpmDownloadStats> latestOpt = npmRepo.findLatest();
+        long npmCumulative = latestOpt
+                .map(NpmDownloadStats::getCumulativeDownloads)
+                .orElse(0L);
+
+        long githubDownloads = 0;
+        long total = npmCumulative + githubDownloads;
+
+        return new DownloadChannelSummaryDTO(total, githubDownloads, npmCumulative, null, null);
+    }
+
+    public DownloadChannelDistributionDTO getDownloadChannelDistribution() {
+        Optional<NpmDownloadStats> latestOpt = npmRepo.findLatest();
+        long npmDownloads = latestOpt
+                .map(NpmDownloadStats::getCumulativeDownloads)
+                .orElse(0L);
+
+        long githubDownloads = 0;
+        long total = npmDownloads + githubDownloads;
+
+        List<DownloadChannelDistributionDTO.ChannelItem> channels = new ArrayList<>();
+        if (total > 0) {
+            channels.add(new DownloadChannelDistributionDTO.ChannelItem(
+                    "GitHub", githubDownloads, round1((double) githubDownloads / total * 100)));
+            channels.add(new DownloadChannelDistributionDTO.ChannelItem(
+                    "npm", npmDownloads, round1((double) npmDownloads / total * 100)));
+        }
+
+        return new DownloadChannelDistributionDTO(channels);
     }
 
     public DownloadSummaryDTO getDownloadSummary() {
@@ -704,13 +795,13 @@ public class DashboardService {
         LocalDate firstOfMonth = today.withDayOfMonth(1);
         LocalDate lastMonthStart = today.minusMonths(1).withDayOfMonth(1);
 
-        long totalCount = getMetricValue(KEY_VOUCHER_TOTAL_COUNT, today, voucherClaimLogRepo::countAllDistinctUsers);
-        long totalAmount = getMetricValue(KEY_VOUCHER_TOTAL_AMOUNT, today, voucherClaimLogRepo::sumAllAmount);
+        long totalCount = getMetricValue(KEY_VOUCHER_TOTAL_COUNT, today, voucherRecordRepo::countAllSuccessUsers);
+        long totalAmount = getMetricValue(KEY_VOUCHER_TOTAL_AMOUNT, today, voucherRecordRepo::sumAllSuccessAmount);
 
-        long todayCount = getMetricValue(KEY_VOUCHER_DAILY_COUNT, today, () -> voucherClaimLogRepo.countDistinctUsersByDate(today));
-        long todayAmount = getMetricValue(KEY_VOUCHER_DAILY_AMOUNT, today, () -> voucherClaimLogRepo.sumAmountByDate(today));
-        long yesterdayCount = getMetricValue(KEY_VOUCHER_DAILY_COUNT, yesterday, () -> voucherClaimLogRepo.countDistinctUsersByDate(yesterday));
-        long yesterdayAmount = getMetricValue(KEY_VOUCHER_DAILY_AMOUNT, yesterday, () -> voucherClaimLogRepo.sumAmountByDate(yesterday));
+        long todayCount = getMetricValue(KEY_VOUCHER_DAILY_COUNT, today, () -> voucherRecordRepo.countSuccessUsersByDate(today));
+        long todayAmount = getMetricValue(KEY_VOUCHER_DAILY_AMOUNT, today, () -> voucherRecordRepo.sumSuccessAmountByDate(today));
+        long yesterdayCount = getMetricValue(KEY_VOUCHER_DAILY_COUNT, yesterday, () -> voucherRecordRepo.countSuccessUsersByDate(yesterday));
+        long yesterdayAmount = getMetricValue(KEY_VOUCHER_DAILY_AMOUNT, yesterday, () -> voucherRecordRepo.sumSuccessAmountByDate(yesterday));
 
         double todayCountChain = yesterdayCount > 0 ? round1((double) (todayCount - yesterdayCount) / yesterdayCount * 100) : (todayCount > 0 ? 100.0 : 0);
         double todayAmountChain = yesterdayAmount > 0 ? round1((double) (todayAmount - yesterdayAmount) / yesterdayAmount * 100) : (todayAmount > 0 ? 100.0 : 0);
@@ -720,24 +811,35 @@ public class DashboardService {
         int lastYear = lastMonthStart.getYear();
         int lastMonth = lastMonthStart.getMonthValue();
 
-        long monthCount = getMetricValue(KEY_VOUCHER_MONTHLY_COUNT, today, () -> voucherClaimLogRepo.countDistinctUsersByMonth(year, month));
-        long monthAmount = getMetricValue(KEY_VOUCHER_MONTHLY_AMOUNT, today, () -> voucherClaimLogRepo.sumAmountByMonth(year, month));
-        long lastMonthCount = voucherClaimLogRepo.countDistinctUsersByMonth(lastYear, lastMonth);
-        long lastMonthAmount = voucherClaimLogRepo.sumAmountByMonth(lastYear, lastMonth);
+        long monthCount = getMetricValue(KEY_VOUCHER_MONTHLY_COUNT, today, () -> voucherRecordRepo.countSuccessUsersByMonth(year, month));
+        long monthAmount = getMetricValue(KEY_VOUCHER_MONTHLY_AMOUNT, today, () -> voucherRecordRepo.sumSuccessAmountByMonth(year, month));
+        long lastMonthCount = voucherRecordRepo.countSuccessUsersByMonth(lastYear, lastMonth);
+        long lastMonthAmount = voucherRecordRepo.sumSuccessAmountByMonth(lastYear, lastMonth);
 
         double monthCountChain = lastMonthCount > 0 ? round1((double) (monthCount - lastMonthCount) / lastMonthCount * 100) : (monthCount > 0 ? 100.0 : 0);
         double monthAmountChain = lastMonthAmount > 0 ? round1((double) (monthAmount - lastMonthAmount) / lastMonthAmount * 100) : (monthAmount > 0 ? 100.0 : 0);
 
+        List<Object[]> statusCounts = voucherRecordRepo.countByStatusAndDate(today);
+        long successCount = 0, failCount = 0, alreadyClaimedCount = 0;
+        for (Object[] row : statusCounts) {
+            if ("success".equals(row[0])) successCount = ((Number) row[1]).longValue();
+            else if ("fail".equals(row[0])) failCount = ((Number) row[1]).longValue();
+            else if ("already_claimed".equals(row[0])) alreadyClaimedCount = ((Number) row[1]).longValue();
+        }
+        long totalAttempts = successCount + failCount + alreadyClaimedCount;
+        double successRate = totalAttempts > 0 ? round1((double) successCount / totalAttempts * 100) : 0;
+
         return new VoucherSummaryDTO(
                 totalCount, totalAmount,
                 todayCount, todayAmount, todayCountChain, todayAmountChain,
-                monthCount, monthAmount, monthCountChain, monthAmountChain
+                monthCount, monthAmount, monthCountChain, monthAmountChain,
+                successRate, failCount, alreadyClaimedCount
         );
     }
 
     public VoucherTrendDTO getVoucherTrend() {
         LocalDate startDate = LocalDate.now().minusDays(TREND_DAYS - 1);
-        List<Object[]> rows = voucherClaimLogRepo.findDailyStatsSince(startDate);
+        List<Object[]> rows = voucherRecordRepo.findDailySuccessStatsSince(startDate);
 
         Map<LocalDate, long[]> dailyMap = new TreeMap<>();
         for (Object[] row : rows) {
@@ -772,7 +874,7 @@ public class DashboardService {
             return new VoucherDistributionDTO(items);
         }
 
-        List<Object[]> rows = voucherClaimLogRepo.findFaceValueDistributionByDate(today);
+        List<Object[]> rows = voucherRecordRepo.findFaceValueDistributionByDate(today);
         if (rows.isEmpty()) {
             return new VoucherDistributionDTO(List.of());
         }
@@ -793,8 +895,8 @@ public class DashboardService {
     void aggregateVoucherMetrics(LocalDate date) {
         log.info("[voucher] aggregating for {}", date);
 
-        saveMetric(date, KEY_VOUCHER_DAILY_COUNT, voucherClaimLogRepo.countDistinctUsersByDate(date));
-        saveMetric(date, KEY_VOUCHER_DAILY_AMOUNT, voucherClaimLogRepo.sumAmountByDate(date));
+        saveMetric(date, KEY_VOUCHER_DAILY_COUNT, voucherRecordRepo.countSuccessUsersByDate(date));
+        saveMetric(date, KEY_VOUCHER_DAILY_AMOUNT, voucherRecordRepo.sumSuccessAmountByDate(date));
 
         long prevTotalCount = 0;
         long prevTotalAmount = 0;
@@ -807,15 +909,15 @@ public class DashboardService {
             prevTotalAmount = prevAmount.get().getMetricValue();
         }
 
-        long todayCount = voucherClaimLogRepo.countDistinctUsersByDate(date);
-        long todayAmount = voucherClaimLogRepo.sumAmountByDate(date);
+        long todayCount = voucherRecordRepo.countSuccessUsersByDate(date);
+        long todayAmount = voucherRecordRepo.sumSuccessAmountByDate(date);
         saveMetric(date, KEY_VOUCHER_TOTAL_COUNT, prevTotalCount + todayCount);
         saveMetric(date, KEY_VOUCHER_TOTAL_AMOUNT, prevTotalAmount + todayAmount);
 
         int year = date.getYear();
         int month = date.getMonthValue();
-        saveMetric(date, KEY_VOUCHER_MONTHLY_COUNT, voucherClaimLogRepo.countDistinctUsersByMonth(year, month));
-        saveMetric(date, KEY_VOUCHER_MONTHLY_AMOUNT, voucherClaimLogRepo.sumAmountByMonth(year, month));
+        saveMetric(date, KEY_VOUCHER_MONTHLY_COUNT, voucherRecordRepo.countSuccessUsersByMonth(year, month));
+        saveMetric(date, KEY_VOUCHER_MONTHLY_AMOUNT, voucherRecordRepo.sumSuccessAmountByMonth(year, month));
 
         aggregateVoucherFaceValue(date);
 
@@ -823,7 +925,7 @@ public class DashboardService {
     }
 
     private void aggregateVoucherFaceValue(LocalDate date) {
-        List<Object[]> rows = voucherClaimLogRepo.findFaceValueDistributionByDate(date);
+        List<Object[]> rows = voucherRecordRepo.findFaceValueDistributionByDate(date);
         for (Object[] row : rows) {
             int amountYuan = ((Number) row[0]).intValue();
             int count = ((Number) row[1]).intValue();
@@ -844,7 +946,11 @@ public class DashboardService {
     // ==================== Sandbox Resources ====================
 
     private static final String KEY_SANDBOX_DAILY_USERS = "sandbox_daily_users";
-    private static final String KEY_SANDBOX_DAILY_EVENTS = "sandbox_daily_events";
+    private static final String KEY_SANDBOX_DAILY_SESSIONS = "sandbox_daily_sessions";
+    private static final String KEY_SANDBOX_DAILY_SUCCESS = "sandbox_daily_success";
+    private static final String KEY_SANDBOX_DAILY_FAIL = "sandbox_daily_fail";
+    private static final String KEY_SANDBOX_DAILY_CREATE = "sandbox_daily_create";
+    private static final String KEY_SANDBOX_DAILY_REUSE = "sandbox_daily_reuse";
     private static final String KEY_SANDBOX_TOTAL_USERS = "sandbox_total_users";
     private static final String KEY_SANDBOX_AVG_DURATION_MS = "sandbox_avg_duration_ms";
     private static final String KEY_SANDBOX_P95_DURATION_MS = "sandbox_p95_duration_ms";
@@ -854,12 +960,12 @@ public class DashboardService {
         LocalDate yesterday = today.minusDays(1);
 
         long totalUsers = getMetricValue(KEY_SANDBOX_TOTAL_USERS, today,
-                telemetryRepo::countAllSandboxUsers);
+                sandboxSessionRepo::countAllDistinctUsers);
 
         long dailyUsers = getMetricValue(KEY_SANDBOX_DAILY_USERS, today,
-                () -> telemetryRepo.countSandboxUsersByDate(today));
+                () -> sandboxSessionRepo.countDistinctUsersByDate(today));
         long yesterdayUsers = getMetricValue(KEY_SANDBOX_DAILY_USERS, yesterday,
-                () -> telemetryRepo.countSandboxUsersByDate(yesterday));
+                () -> sandboxSessionRepo.countDistinctUsersByDate(yesterday));
         double chainRatio = 0;
         if (yesterdayUsers > 0) {
             chainRatio = (double) (dailyUsers - yesterdayUsers) / yesterdayUsers * 100;
@@ -875,15 +981,20 @@ public class DashboardService {
         long p95Ms = getMetricValue(KEY_SANDBOX_P95_DURATION_MS, today, () -> 0);
         double p95Sec = p95Ms / 1000.0;
 
+        long successCount = getMetricValue(KEY_SANDBOX_DAILY_SUCCESS, today, () -> 0);
+        long failCount = getMetricValue(KEY_SANDBOX_DAILY_FAIL, today, () -> 0);
+        long totalOps = successCount + failCount;
+        double successRate = totalOps > 0 ? (double) successCount / totalOps * 100 : 0;
+
         return new SandboxSummaryDTO(totalUsers, dailyUsers, chainRatio,
-                avgSec, avgDeltaSec, p95Sec, "<20s");
+                avgSec, avgDeltaSec, p95Sec, "<20s", successRate, failCount);
     }
 
     public SandboxTrendDTO getSandboxTrend() {
         LocalDate startDate = LocalDate.now().minusDays(29);
 
         List<MetricDaily> userMetrics = metricRepo.findByKeySince(KEY_SANDBOX_DAILY_USERS, startDate);
-        List<MetricDaily> eventMetrics = metricRepo.findByKeySince(KEY_SANDBOX_DAILY_EVENTS, startDate);
+        List<MetricDaily> eventMetrics = metricRepo.findByKeySince(KEY_SANDBOX_DAILY_SESSIONS, startDate);
 
         if (userMetrics != null && !userMetrics.isEmpty()) {
             List<SandboxTrendDTO.TrendPoint> daily = userMetrics.stream()
@@ -940,20 +1051,38 @@ public class DashboardService {
     void aggregateSandboxMetrics(LocalDate date) {
         log.info("[sandbox] aggregating for {}", date);
 
-        long dailyUsers = telemetryRepo.countSandboxUsersByDate(date);
-        long dailyEvents = telemetryRepo.countSandboxEventsByDate(date);
+        long dailyUsers = sandboxSessionRepo.countDistinctUsersByDate(date);
+        long dailySessions = sandboxSessionRepo.countSessionsByDate(date);
         saveMetric(date, KEY_SANDBOX_DAILY_USERS, dailyUsers);
-        saveMetric(date, KEY_SANDBOX_DAILY_EVENTS, dailyEvents);
+        saveMetric(date, KEY_SANDBOX_DAILY_SESSIONS, dailySessions);
+
+        List<Object[]> statusCounts = sandboxSessionRepo.countByStatusAndDate(date);
+        long success = 0, fail = 0;
+        for (Object[] row : statusCounts) {
+            if ("success".equals(row[0])) success = ((Number) row[1]).longValue();
+            else if ("fail".equals(row[0])) fail = ((Number) row[1]).longValue();
+        }
+        saveMetric(date, KEY_SANDBOX_DAILY_SUCCESS, success);
+        saveMetric(date, KEY_SANDBOX_DAILY_FAIL, fail);
+
+        List<Object[]> actionCounts = sandboxSessionRepo.countByActionAndDate(date);
+        long create = 0, reuse = 0;
+        for (Object[] row : actionCounts) {
+            if ("create".equals(row[0])) create = ((Number) row[1]).longValue();
+            else if ("reuse".equals(row[0])) reuse = ((Number) row[1]).longValue();
+        }
+        saveMetric(date, KEY_SANDBOX_DAILY_CREATE, create);
+        saveMetric(date, KEY_SANDBOX_DAILY_REUSE, reuse);
 
         long prevTotal = getMetricValue(KEY_SANDBOX_TOTAL_USERS, date.minusDays(1),
-                () -> telemetryRepo.countAllSandboxUsers() - dailyUsers);
+                () -> sandboxSessionRepo.countAllDistinctUsers() - dailyUsers);
         saveMetric(date, KEY_SANDBOX_TOTAL_USERS, prevTotal + dailyUsers);
 
-        List<Double> durations = telemetryRepo.sandboxDurationsByDate(date);
+        List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
         if (durations != null && !durations.isEmpty()) {
-            double avg = durations.stream().mapToDouble(d -> d).average().orElse(0);
-            long p95 = calcP95(durations);
-            saveMetric(date, KEY_SANDBOX_AVG_DURATION_MS, (long) avg);
+            long avg = durations.stream().mapToLong(l -> l).sum() / durations.size();
+            long p95 = calcP95Long(durations);
+            saveMetric(date, KEY_SANDBOX_AVG_DURATION_MS, avg);
             saveMetric(date, KEY_SANDBOX_P95_DURATION_MS, p95);
 
             aggregateDurationBuckets(date, durations);
@@ -972,7 +1101,15 @@ public class DashboardService {
         return (long) copy.get(idx).doubleValue();
     }
 
-    private void aggregateDurationBuckets(LocalDate date, List<Double> durations) {
+    private long calcP95Long(List<Long> durations) {
+        List<Long> copy = new ArrayList<>(durations);
+        Collections.sort(copy);
+        int idx = (int) Math.ceil(copy.size() * 0.95) - 1;
+        idx = Math.max(0, idx);
+        return copy.get(idx);
+    }
+
+    private void aggregateDurationBuckets(LocalDate date, List<Long> durations) {
         Object[][] buckets = {
             {"lt_5s",   1,      0,   5000},
             {"5_8s",    2,   5000,   8000},
@@ -1005,7 +1142,7 @@ public class DashboardService {
     }
 
     private void aggregateSandboxHourlyStats(LocalDate date) {
-        List<Object[]> rows = telemetryRepo.sandboxHourlyUsersByDate(date);
+        List<Object[]> rows = sandboxSessionRepo.hourlyUsersByDate(date);
         Map<Integer, Integer> hourMap = new HashMap<>();
         for (Object[] row : rows) {
             int hour = ((Number) row[0]).intValue();
@@ -1028,7 +1165,7 @@ public class DashboardService {
     }
 
     private SandboxDurationDTO buildDurationFromTelemetry(LocalDate date) {
-        List<Double> durations = telemetryRepo.sandboxDurationsByDate(date);
+        List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
         if (durations == null || durations.isEmpty()) {
             return new SandboxDurationDTO(date.toString(), List.of());
         }
@@ -1058,7 +1195,7 @@ public class DashboardService {
     }
 
     private SandboxHourlyDTO buildHourlyFromTelemetry(LocalDate date) {
-        List<Object[]> rows = telemetryRepo.sandboxHourlyUsersByDate(date);
+        List<Object[]> rows = sandboxSessionRepo.hourlyUsersByDate(date);
         Map<Integer, Integer> hourMap = new HashMap<>();
         for (Object[] row : rows) {
             int hour = ((Number) row[0]).intValue();

@@ -9,8 +9,11 @@ import com.huaweicloud.hdkitservice.model.CapabilitySummaryDTO;
 import com.huaweicloud.hdkitservice.model.CapabilityTrendDTO;
 import com.huaweicloud.hdkitservice.model.DeveloperSummaryDTO;
 import com.huaweicloud.hdkitservice.model.DeveloperTrendDTO;
+import com.huaweicloud.hdkitservice.model.DownloadChannelDistributionDTO;
+import com.huaweicloud.hdkitservice.model.DownloadChannelSummaryDTO;
 import com.huaweicloud.hdkitservice.model.DownloadSummaryDTO;
 import com.huaweicloud.hdkitservice.model.DownloadTrendDTO;
+import com.huaweicloud.hdkitservice.model.NewUserTrendDTO;
 import com.huaweicloud.hdkitservice.model.SandboxDurationDTO;
 import com.huaweicloud.hdkitservice.model.SandboxHourlyDTO;
 import com.huaweicloud.hdkitservice.model.SandboxSummaryDTO;
@@ -44,6 +47,11 @@ public class DashboardController {
         return dashboardService.getDeveloperTrend();
     }
 
+    @GetMapping("/developer/new-user-trend")
+    public NewUserTrendDTO newUserTrend() {
+        return dashboardService.getNewUserTrend();
+    }
+
     @GetMapping("/agent/distribution")
     public AgentDistributionDTO agentDistribution() {
         return dashboardService.getAgentDistribution();
@@ -52,6 +60,16 @@ public class DashboardController {
     @GetMapping("/download/trend")
     public DownloadTrendDTO downloadTrend() {
         return dashboardService.getDownloadTrend();
+    }
+
+    @GetMapping("/download/channel-summary")
+    public DownloadChannelSummaryDTO downloadChannelSummary() {
+        return dashboardService.getDownloadChannelSummary();
+    }
+
+    @GetMapping("/download/channel-distribution")
+    public DownloadChannelDistributionDTO downloadChannelDistribution() {
+        return dashboardService.getDownloadChannelDistribution();
     }
 
     @GetMapping("/download/summary")
