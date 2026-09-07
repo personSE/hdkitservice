@@ -19,6 +19,17 @@ spring:
 hdkit:
   telemetry:
     salt: "${TELEMETRY_SALT:changeme}"
+  rate-limit:
+    telemetry:
+      global-concurrency: ${RATE_LIMIT_TELEMETRY_CONCURRENCY:200}
+      per-ip-per-second: ${RATE_LIMIT_TELEMETRY_PER_IP:100}
+      per-install-per-second: ${RATE_LIMIT_TELEMETRY_PER_INSTALL:20}
+    userhash:
+      global-concurrency: ${RATE_LIMIT_USERHASH_CONCURRENCY:50}
+      per-ip-per-second: ${RATE_LIMIT_USERHASH_PER_IP:50}
+      per-ak-per-second: ${RATE_LIMIT_USERHASH_PER_AK:10}
+  userhash:
+    persist-ak-fallback: ${PERSIST_AK_FALLBACK:true}
   auth:
     admin-username: "${ADMIN_USERNAME:admin}"
     admin-password: "${ADMIN_PASSWORD:Hdkit@2026}"

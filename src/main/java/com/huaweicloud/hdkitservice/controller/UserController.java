@@ -2,6 +2,7 @@ package com.huaweicloud.hdkitservice.controller;
 
 import com.huaweicloud.hdkitservice.service.IncentiveClient;
 import com.huaweicloud.hdkitservice.service.TelemetryHashService;
+import com.huaweicloud.hdkitservice.service.UserHashService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -20,29 +21,38 @@ public class UserController {
 
     private final IncentiveClient incentiveClient;
     private final TelemetryHashService hashService;
+    private final UserHashService userHashService;
 
-    public UserController(IncentiveClient incentiveClient, TelemetryHashService hashService) {
+    public UserController(IncentiveClient incentiveClient, TelemetryHashService hashService,
+                          UserHashService userHashService) {
         this.incentiveClient = incentiveClient;
         this.hashService = hashService;
+        this.userHashService = userHashService;
     }
 
     @GetMapping("/user/generatorUserIDHash")
     public ResponseEntity<Map<String, String>> generatorUserIDHash(@RequestHeader("X-HW-AK") String ak,
                                                                     @RequestHeader("X-HW-SK") String sk,
                                                                     @RequestHeader(value = "X-HW-Security-Token", required = false) String securityToken) {
-        String domainId;
+        String domainId = null;
+        boolean genByAsk = false;
         try {
             domainId = incentiveClient.resolveDomainIdFromIam(ak, sk, securityToken);
         } catch (IncentiveClient.IncentiveException e) {
             log.warn("[generatorUserIDHash] IAM failed, using AK fallback: {}", e.getMessage());
-            String hash = hashService.generateFallbackUserHash(ak);
-            return ResponseEntity.ok(Map.of("userHash", hash));
+            genByAsk = true;
         }
 
+        String userHash;
         if (domainId != null && !domainId.isEmpty()) {
-            return ResponseEntity.ok(Map.of("userHash", hashService.generateUserHash(domainId)));
+            userHash = hashService.generateUserHash(domainId);
+        } else {
+            userHash = hashService.generateFallbackUserHash(ak);
+            genByAsk = true;
         }
 
-        return ResponseEntity.ok(Map.of("userHash", hashService.generateFallbackUserHash(ak)));
+        userHashService.record(userHash, domainId, genByAsk);
+
+        return ResponseEntity.ok(Map.of("userHash", userHash));
     }
 }

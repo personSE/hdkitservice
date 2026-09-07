@@ -1,21 +1,29 @@
 package com.huaweicloud.hdkitservice.controller;
 
+import com.huaweicloud.hdkitservice.filter.TelemetryRateLimitFilter;
 import com.huaweicloud.hdkitservice.service.IncentiveClient;
+import com.huaweicloud.hdkitservice.service.JwtService;
 import com.huaweicloud.hdkitservice.service.TelemetryHashService;
+import com.huaweicloud.hdkitservice.service.UserHashService;
 import com.huaweicloud.hdkitservice.util.Masker;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(UserController.class)
+@WebMvcTest(value = UserController.class,
+        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE,
+                classes = TelemetryRateLimitFilter.class))
 class UserControllerTest {
 
     @Autowired
@@ -28,7 +36,13 @@ class UserControllerTest {
     private TelemetryHashService hashService;
 
     @MockBean
+    private UserHashService userHashService;
+
+    @MockBean
     private Masker masker;
+
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     void generatorUserIDHashWithDomainId() throws Exception {
@@ -39,6 +53,8 @@ class UserControllerTest {
                         .header("X-HW-AK", "AK").header("X-HW-SK", "SK"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userHash").value("hash123abc"));
+
+        verify(userHashService).record(eq("hash123abc"), eq("domain123"), eq(false));
     }
 
     @Test
@@ -51,6 +67,8 @@ class UserControllerTest {
                         .header("X-HW-AK", "AK").header("X-HW-SK", "SK"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userHash").value("fallback123"));
+
+        verify(userHashService).record(eq("fallback123"), org.mockito.ArgumentMatchers.isNull(), eq(true));
     }
 
     @Test
@@ -62,6 +80,8 @@ class UserControllerTest {
                         .header("X-HW-AK", "AK").header("X-HW-SK", "SK"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userHash").value("fallback456"));
+
+        verify(userHashService).record(eq("fallback456"), eq(""), eq(true));
     }
 
     @Test

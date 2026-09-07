@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -24,51 +25,109 @@ public class TelemetryRateLimitFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(TelemetryRateLimitFilter.class);
 
     private static final String TELEMETRY_PATH = "/rest/developer/server/hdkitservice/telemetry/events";
+    private static final String USER_HASH_PATH = "/rest/developer/server/hdkitservice/user/generatorUserIDHash";
 
-    private final Semaphore globalSemaphore = new Semaphore(50);
+    private final int telemetryGlobalConcurrency;
+    private final int telemetryPerIp;
+    private final int telemetryPerInstall;
+    private final int userHashGlobalConcurrency;
+    private final int userHashPerIp;
+    private final int userHashPerAk;
 
-    private final Map<String, long[]> ipWindows = new ConcurrentHashMap<>();
-    private final Map<String, long[]> installIdWindows = new ConcurrentHashMap<>();
+    private final Semaphore telemetrySemaphore;
+    private final Semaphore userHashSemaphore;
+
+    private final Map<String, long[]> telemetryIpWindows = new ConcurrentHashMap<>();
+    private final Map<String, long[]> telemetryInstallIdWindows = new ConcurrentHashMap<>();
+    private final Map<String, long[]> userHashIpWindows = new ConcurrentHashMap<>();
+    private final Map<String, long[]> userHashAkWindows = new ConcurrentHashMap<>();
+
+    public TelemetryRateLimitFilter(
+            @Value("${hdkit.rate-limit.telemetry.global-concurrency:200}") int telemetryGlobalConcurrency,
+            @Value("${hdkit.rate-limit.telemetry.per-ip-per-second:100}") int telemetryPerIp,
+            @Value("${hdkit.rate-limit.telemetry.per-install-per-second:20}") int telemetryPerInstall,
+            @Value("${hdkit.rate-limit.userhash.global-concurrency:50}") int userHashGlobalConcurrency,
+            @Value("${hdkit.rate-limit.userhash.per-ip-per-second:50}") int userHashPerIp,
+            @Value("${hdkit.rate-limit.userhash.per-ak-per-second:10}") int userHashPerAk) {
+        this.telemetryGlobalConcurrency = telemetryGlobalConcurrency;
+        this.telemetryPerIp = telemetryPerIp;
+        this.telemetryPerInstall = telemetryPerInstall;
+        this.userHashGlobalConcurrency = userHashGlobalConcurrency;
+        this.userHashPerIp = userHashPerIp;
+        this.userHashPerAk = userHashPerAk;
+        this.telemetrySemaphore = new Semaphore(telemetryGlobalConcurrency);
+        this.userHashSemaphore = new Semaphore(userHashGlobalConcurrency);
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
-        if (!TELEMETRY_PATH.equals(request.getRequestURI())) {
+        String uri = request.getRequestURI();
+        if (TELEMETRY_PATH.equals(uri)) {
+            handleTelemetry(request, response, chain);
+        } else if (USER_HASH_PATH.equals(uri)) {
+            handleUserHash(request, response, chain);
+        } else {
             chain.doFilter(request, response);
+        }
+    }
+
+    private void handleTelemetry(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        if (!telemetrySemaphore.tryAcquire()) {
+            writeRateResponse(response, HttpStatus.SERVICE_UNAVAILABLE.value(), "HDKIT_OVERLOADED", "Server overloaded");
             return;
         }
-
-        if (!globalSemaphore.tryAcquire()) {
-            response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
-            response.setContentType("application/json");
-            response.getWriter().write("{\"code\":\"HDKIT_OVERLOADED\",\"message\":\"Server overloaded\"}");
-            return;
-        }
-
         try {
             String ip = getClientIp(request);
-            if (!checkRate(ipWindows, ip, 10)) {
-                response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-                response.setContentType("application/json");
-                response.getWriter().write("{\"code\":\"HDKIT_RATE_LIMITED\",\"message\":\"Too many requests\"}");
+            if (!checkRate(telemetryIpWindows, ip, telemetryPerIp)) {
+                writeRateResponse(response, HttpStatus.TOO_MANY_REQUESTS.value(), "HDKIT_RATE_LIMITED", "Too many requests");
                 return;
             }
-
             String installId = request.getHeader("X-Install-ID");
             if (installId != null && !installId.isEmpty()) {
-                if (!checkRate(installIdWindows, installId, 2)) {
-                    response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"code\":\"HDKIT_RATE_LIMITED\",\"message\":\"Too many requests\"}");
+                if (!checkRate(telemetryInstallIdWindows, installId, telemetryPerInstall)) {
+                    writeRateResponse(response, HttpStatus.TOO_MANY_REQUESTS.value(), "HDKIT_RATE_LIMITED", "Too many requests");
                     return;
                 }
             }
-
             chain.doFilter(request, response);
         } finally {
-            globalSemaphore.release();
+            telemetrySemaphore.release();
         }
+    }
+
+    private void handleUserHash(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        if (!userHashSemaphore.tryAcquire()) {
+            writeRateResponse(response, HttpStatus.SERVICE_UNAVAILABLE.value(), "HDKIT_OVERLOADED", "Server overloaded");
+            return;
+        }
+        try {
+            String ip = getClientIp(request);
+            if (!checkRate(userHashIpWindows, ip, userHashPerIp)) {
+                writeRateResponse(response, HttpStatus.TOO_MANY_REQUESTS.value(), "HDKIT_RATE_LIMITED", "Too many requests");
+                return;
+            }
+            String ak = request.getHeader("X-HW-AK");
+            if (ak != null && !ak.isEmpty()) {
+                if (!checkRate(userHashAkWindows, ak, userHashPerAk)) {
+                    writeRateResponse(response, HttpStatus.TOO_MANY_REQUESTS.value(), "HDKIT_RATE_LIMITED", "Too many requests");
+                    return;
+                }
+            }
+            chain.doFilter(request, response);
+        } finally {
+            userHashSemaphore.release();
+        }
+    }
+
+    private void writeRateResponse(HttpServletResponse response, int status, String code, String message)
+            throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}");
     }
 
     private boolean checkRate(Map<String, long[]> windows, String key, int maxPerSecond) {
