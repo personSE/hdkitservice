@@ -65,79 +65,79 @@ public interface TelemetryEventRepository extends JpaRepository<TelemetryEvent, 
             nativeQuery = true)
     List<Object[]> agentDistribution();
 
-    // ==================== Open Capabilities (v2.0: event_key CASE based) ====================
+    // ==================== Open Capabilities (v2.1: skill by event_key, mcp/cli by capability) ====================
 
-    // v2.0: 能力调用总次数 — 用 event_key 前缀匹配，不再依赖 capability 字段
+    // v2.1: 能力调用总次数 — skill 用 event_key，mcp/cli 用 capability 字段
     @Query(value = "SELECT COUNT(*) FROM telemetry_event e " +
             "WHERE e.event_key = 'skill:retrieve' " +
-            "   OR e.event_key LIKE 'tool:%' " +
-            "   OR e.event_key LIKE 'cli:%'",
+            "   OR e.capability = 'mcp' " +
+            "   OR e.capability = 'cli'",
             nativeQuery = true)
     long capabilityCallCounts();
 
-    // v2.0: 能力调用去重用户数 — 同上条件 + 排除 test 数据
+    // v2.1: 能力调用去重用户数 — 同上条件 + 排除 test 数据
     @Query(value = "SELECT COUNT(DISTINCT e.user_hash) FROM telemetry_event e " +
             "WHERE (e.event_key = 'skill:retrieve' " +
-            "   OR e.event_key LIKE 'tool:%' " +
-            "   OR e.event_key LIKE 'cli:%') " +
+            "   OR e.capability = 'mcp' " +
+            "   OR e.capability = 'cli') " +
             "AND e.user_hash IS NOT NULL AND e.user_hash <> '' " +
             "AND e.user_hash <> 'test'",
             nativeQuery = true)
     long countDistinctUsersWithCapability();
 
-    // v2.0: 按能力类型分布 — CASE 表达式分组
+    // v2.1: 按能力类型分布 — skill 用 event_key，mcp/cli 用 capability 字段
     @Query(value = "SELECT " +
             "CASE " +
             "  WHEN e.event_key = 'skill:retrieve' THEN 'skill' " +
-            "  WHEN e.event_key LIKE 'tool:%' THEN 'mcp' " +
-            "  WHEN e.event_key LIKE 'cli:%' THEN 'cli' " +
+            "  WHEN e.capability = 'mcp' THEN 'mcp' " +
+            "  WHEN e.capability = 'cli' THEN 'cli' " +
             "END AS cap_type, COUNT(*) AS cnt " +
             "FROM telemetry_event e " +
             "WHERE e.event_key = 'skill:retrieve' " +
-            "   OR e.event_key LIKE 'tool:%' " +
-            "   OR e.event_key LIKE 'cli:%' " +
+            "   OR e.capability = 'mcp' " +
+            "   OR e.capability = 'cli' " +
             "GROUP BY cap_type ORDER BY cnt DESC",
             nativeQuery = true)
     List<Object[]> capabilityCallCountsByCap();
 
-    // v2.0: 按日期×能力类型趋势 — CASE 表达式
+    // v2.1: 按日期×能力类型趋势
     @Query(value = "SELECT DATE(e.server_time) AS d, " +
             "CASE " +
             "  WHEN e.event_key = 'skill:retrieve' THEN 'skill' " +
-            "  WHEN e.event_key LIKE 'tool:%' THEN 'mcp' " +
-            "  WHEN e.event_key LIKE 'cli:%' THEN 'cli' " +
+            "  WHEN e.capability = 'mcp' THEN 'mcp' " +
+            "  WHEN e.capability = 'cli' THEN 'cli' " +
             "END AS cap_type, COUNT(*) AS cnt " +
             "FROM telemetry_event e " +
             "WHERE (e.event_key = 'skill:retrieve' " +
-            "   OR e.event_key LIKE 'tool:%' " +
-            "   OR e.event_key LIKE 'cli:%') " +
+            "   OR e.capability = 'mcp' " +
+            "   OR e.capability = 'cli') " +
             "AND DATE(e.server_time) >= :startDate " +
             "GROUP BY DATE(e.server_time), cap_type ORDER BY d, cap_type",
             nativeQuery = true)
     List<Object[]> capabilityCallsByDate(@Param("startDate") LocalDate startDate);
 
-    // v2.0: 按日期聚合（预聚合任务用）— CASE 表达式
+    // v2.1: 按日期聚合（预聚合任务用）
     @Query(value = "SELECT " +
             "CASE " +
             "  WHEN e.event_key = 'skill:retrieve' THEN 'skill' " +
-            "  WHEN e.event_key LIKE 'tool:%' THEN 'mcp' " +
-            "  WHEN e.event_key LIKE 'cli:%' THEN 'cli' " +
+            "  WHEN e.capability = 'mcp' THEN 'mcp' " +
+            "  WHEN e.capability = 'cli' THEN 'cli' " +
             "END AS cap_type, COUNT(*) AS cnt " +
             "FROM telemetry_event e " +
             "WHERE (e.event_key = 'skill:retrieve' " +
-            "   OR e.event_key LIKE 'tool:%' " +
-            "   OR e.event_key LIKE 'cli:%') " +
+            "   OR e.capability = 'mcp' " +
+            "   OR e.capability = 'cli') " +
             "AND DATE(e.server_time) = :date " +
             "GROUP BY cap_type",
             nativeQuery = true)
     List<Object[]> capabilityCallCountsBySpecificDate(@Param("date") LocalDate date);
 
-    // v2.0: 按能力类型+日期统计去重用户 — CASE 匹配 capability 参数
+    // v2.1: 按能力类型+日期统计去重用户
     @Query(value = "SELECT COUNT(DISTINCT e.user_hash) FROM telemetry_event e " +
             "WHERE CASE " +
             "  WHEN :capability = 'skill' THEN e.event_key = 'skill:retrieve' " +
-            "  WHEN :capability = 'mcp' THEN e.event_key LIKE 'tool:%' " +
-            "  WHEN :capability = 'cli' THEN e.event_key LIKE 'cli:%' " +
+            "  WHEN :capability = 'mcp' THEN e.capability = 'mcp' " +
+            "  WHEN :capability = 'cli' THEN e.capability = 'cli' " +
             "END " +
             "AND e.user_hash IS NOT NULL AND e.user_hash <> '' " +
             "AND e.user_hash <> 'test' " +
@@ -146,11 +146,11 @@ public interface TelemetryEventRepository extends JpaRepository<TelemetryEvent, 
     long countDistinctUsersByCapabilityAndDate(@Param("capability") String capability,
                                                 @Param("date") LocalDate date);
 
-    // v2.0: 某日能力调用总次数 — event_key 匹配
+    // v2.1: 某日能力调用总次数
     @Query(value = "SELECT COUNT(*) FROM telemetry_event e " +
             "WHERE (e.event_key = 'skill:retrieve' " +
-            "   OR e.event_key LIKE 'tool:%' " +
-            "   OR e.event_key LIKE 'cli:%') " +
+            "   OR e.capability = 'mcp' " +
+            "   OR e.capability = 'cli') " +
             "AND DATE(e.server_time) = :date",
             nativeQuery = true)
     long capabilityCallCountByDate(@Param("date") LocalDate date);
@@ -218,4 +218,17 @@ public interface TelemetryEventRepository extends JpaRepository<TelemetryEvent, 
             "AND (e.install_id IS NULL OR e.install_id <> 'test')",
             nativeQuery = true)
     long countAllSandboxUsers();
+
+    @Query(value = "SELECT COUNT(DISTINCT e.user_hash) FROM telemetry_event e " +
+            "WHERE e.user_hash IS NOT NULL AND e.user_hash <> '' " +
+            "AND e.user_hash <> 'test' AND e.user_hash <> 'sha256hash1234' " +
+            "AND DATE(e.server_time) = :date " +
+            "AND e.user_hash NOT IN (" +
+            "  SELECT DISTINCT e2.user_hash FROM telemetry_event e2 " +
+            "  WHERE DATE(e2.server_time) < :date " +
+            "  AND e2.user_hash IS NOT NULL AND e2.user_hash <> '' " +
+            "  AND e2.user_hash <> 'test' AND e2.user_hash <> 'sha256hash1234'" +
+            ")",
+            nativeQuery = true)
+    long countNewUsersByDate(@Param("date") LocalDate date);
 }
