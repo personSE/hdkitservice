@@ -146,7 +146,7 @@ class DashboardServiceTest {
         assertEquals("码道", DashboardService.normalizeAgentName("码道 CLI"));
         assertEquals("码道", DashboardService.normalizeAgentName("码道 work windows"));
         assertEquals("officeace", DashboardService.normalizeAgentName("officeace windows"));
-        assertEquals("DSH", DashboardService.normalizeAgentName("DSH"));
+        assertEquals("dsh", DashboardService.normalizeAgentName("DSH"));
         assertEquals("unknown", DashboardService.normalizeAgentName(null));
         assertEquals("unknown", DashboardService.normalizeAgentName(""));
     }

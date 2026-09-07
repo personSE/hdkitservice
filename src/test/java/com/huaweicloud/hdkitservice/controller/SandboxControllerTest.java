@@ -5,6 +5,7 @@ import com.huaweicloud.hdkitservice.model.ConnectResponse;
 import com.huaweicloud.hdkitservice.model.CredentialsResponse;
 import com.huaweicloud.hdkitservice.model.SignAgreementResponse;
 import com.huaweicloud.hdkitservice.service.SandboxService;
+import com.huaweicloud.hdkitservice.service.JwtService;
 import com.huaweicloud.hdkitservice.util.Masker;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,10 +33,12 @@ class SandboxControllerTest {
 
     @MockBean
     private Masker masker;
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     void connectEndpoint() throws Exception {
-        when(service.connect(any(), eq("AK"), eq("SK")))
+        when(service.connect(any(), eq("AK"), eq("SK"), any()))
                 .thenReturn(new ConnectResponse("s1", "dev1", "100", "wss://x", "connected"));
 
         mvc.perform(post("/rest/developer/server/hdkitservice/connect")
@@ -59,7 +62,7 @@ class SandboxControllerTest {
 
     @Test
     void credentialsEndpoint() throws Exception {
-        when(service.credentials(any(), eq("AK"), eq("SK")))
+        when(service.credentials(any(), eq("AK"), eq("SK"), any()))
                 .thenReturn(new CredentialsResponse("s1", "2026-08-14T04:39:54Z"));
 
         mvc.perform(post("/rest/developer/server/hdkitservice/credentials")
@@ -72,7 +75,7 @@ class SandboxControllerTest {
 
     @Test
     void hdkitExceptionMappedToHttpStatus() throws Exception {
-        when(service.credentials(any(), eq("AK"), eq("SK")))
+        when(service.credentials(any(), eq("AK"), eq("SK"), any()))
                 .thenThrow(new SandboxService.HdkitException("HDKIT_NOT_RUNNING", "环境未处于 RUNNING", null));
 
         mvc.perform(post("/rest/developer/server/hdkitservice/credentials")
@@ -85,7 +88,7 @@ class SandboxControllerTest {
 
     @Test
     void checkUserEndpoint() throws Exception {
-        when(service.checkUser(eq("AK"), eq("SK")))
+        when(service.checkUser(eq("AK"), eq("SK"), any()))
                 .thenReturn(new CheckUserResponse(true, true));
 
         mvc.perform(get("/rest/developer/server/hdkitservice/check-user")
@@ -97,7 +100,7 @@ class SandboxControllerTest {
 
     @Test
     void checkUserNotRealnameMappedTo403() throws Exception {
-        when(service.checkUser(eq("AK"), eq("SK")))
+        when(service.checkUser(eq("AK"), eq("SK"), any()))
                 .thenThrow(new SandboxService.HdkitException("HDKIT_NOT_REALNAME", "用户未完成实名认证", null));
 
         mvc.perform(get("/rest/developer/server/hdkitservice/check-user")
@@ -108,7 +111,7 @@ class SandboxControllerTest {
 
     @Test
     void checkUserBothMissingMappedTo403CombinedCode() throws Exception {
-        when(service.checkUser(eq("AK"), eq("SK")))
+        when(service.checkUser(eq("AK"), eq("SK"), any()))
                 .thenThrow(new SandboxService.HdkitException(
                         "HDKIT_NOT_REALNAME_AND_AGREEMENT", "用户未完成实名认证且未签署最新版协议", null));
 
@@ -120,7 +123,7 @@ class SandboxControllerTest {
 
     @Test
     void signAgreementEndpoint() throws Exception {
-        when(service.signAgreement(eq("AK"), eq("SK")))
+        when(service.signAgreement(eq("AK"), eq("SK"), any()))
                 .thenReturn(new SignAgreementResponse(true, 3));
 
         mvc.perform(post("/rest/developer/server/hdkitservice/sign-agreement")

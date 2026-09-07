@@ -1,6 +1,7 @@
 package com.huaweicloud.hdkitservice.controller;
 
 import com.huaweicloud.hdkitservice.service.IncentiveService;
+import com.huaweicloud.hdkitservice.service.JwtService;
 import com.huaweicloud.hdkitservice.util.Masker;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,8 @@ class VoucherControllerTest {
 
     @MockBean
     private Masker masker;
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     void voucherStatusNotClaimed() throws Exception {

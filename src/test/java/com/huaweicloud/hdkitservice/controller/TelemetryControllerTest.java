@@ -2,6 +2,7 @@ package com.huaweicloud.hdkitservice.controller;
 
 import com.huaweicloud.hdkitservice.model.TelemetryEventDto;
 import com.huaweicloud.hdkitservice.service.TelemetryService;
+import com.huaweicloud.hdkitservice.service.JwtService;
 import com.huaweicloud.hdkitservice.util.Masker;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,8 @@ class TelemetryControllerTest {
 
     @MockBean
     private Masker masker;
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     void postEventsReturnsReceived() throws Exception {

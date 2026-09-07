@@ -1,6 +1,8 @@
 package com.huaweicloud.hdkitservice.service;
 
 import com.huaweicloud.hdkitservice.config.HdkitConfig;
+import com.huaweicloud.hdkitservice.repository.VoucherClaimLogRepository;
+import com.huaweicloud.hdkitservice.repository.VoucherRecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +27,8 @@ class IncentiveServiceTest {
         config = new HdkitConfig();
         config.setIncentiveFaceAmount(100);
         config.setDeployEnv("production");
-        service = new IncentiveService(client, config);
+        service = new IncentiveService(client, config, mock(VoucherClaimLogRepository.class),
+                mock(VoucherRecordRepository.class));
     }
 
     // ── Production mode ──
