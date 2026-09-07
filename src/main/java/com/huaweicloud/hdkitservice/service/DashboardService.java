@@ -124,8 +124,8 @@ public class DashboardService {
         long mau = getMetricValue(KEY_MAU, today, () -> telemetryRepo.countDistinctUserHashSince(monthAgo));
         long agentTotal = getMetricValue(KEY_AGENT_TOTAL, today, telemetryRepo::countDistinctAgentHarness);
 
-        long newUsersToday = getMetricValue(KEY_NEW_USERS, today, () -> 0);
-        long newUsersYesterday = getMetricValue(KEY_NEW_USERS, yesterday, () -> 0);
+        long newUsersToday = getMetricValue(KEY_NEW_USERS, today, () -> telemetryRepo.countNewUsersByDate(today));
+        long newUsersYesterday = getMetricValue(KEY_NEW_USERS, yesterday, () -> telemetryRepo.countNewUsersByDate(yesterday));
         double chainRatio = 0;
         if (newUsersYesterday > 0) {
             chainRatio = (double) (newUsersToday - newUsersYesterday) / newUsersYesterday * 100;
@@ -302,6 +302,7 @@ public class DashboardService {
         saveMetric(date, KEY_DAU, telemetryRepo.countDistinctUserHashByDate(date));
         saveMetric(date, KEY_MAU, telemetryRepo.countDistinctUserHashSince(date.minusDays(30)));
         saveMetric(date, KEY_AGENT_TOTAL, telemetryRepo.countDistinctAgentHarness());
+        saveMetric(date, KEY_NEW_USERS, telemetryRepo.countNewUsersByDate(date));
 
         aggregateAgentDistribution(date);
     }
