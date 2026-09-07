@@ -4,7 +4,8 @@ import java.util.List;
 
 public record DownloadTrendDTO(
         List<TrendPoint> npmDaily,
-        long totalNpmDownloads
+        long totalNpmDownloads,
+        List<TrendPoint> githubDaily
 ) {
     public record TrendPoint(String date, long downloads) {}
 }

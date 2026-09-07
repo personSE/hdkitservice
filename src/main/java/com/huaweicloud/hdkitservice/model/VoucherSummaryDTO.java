@@ -10,5 +10,8 @@ public record VoucherSummaryDTO(
         long monthCount,
         long monthAmount,
         double monthCountChainRatio,
-        double monthAmountChainRatio
+        double monthAmountChainRatio,
+        double successRate,
+        long failCount,
+        long alreadyClaimedCount
 ) {}

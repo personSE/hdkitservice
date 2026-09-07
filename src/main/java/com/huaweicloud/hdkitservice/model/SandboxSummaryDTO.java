@@ -7,5 +7,7 @@ public record SandboxSummaryDTO(
     double avgDurationSec,
     double avgDurationDeltaSec,
     double p95DurationSec,
-    String slaTarget
+    String slaTarget,
+    double successRate,
+    long failCount
 ) {}
