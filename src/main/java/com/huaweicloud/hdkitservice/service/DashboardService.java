@@ -833,8 +833,7 @@ public class DashboardService {
         return new VoucherSummaryDTO(
                 totalCount, totalAmount,
                 todayCount, todayAmount, todayCountChain, todayAmountChain,
-                monthCount, monthAmount, monthCountChain, monthAmountChain,
-                successRate, failCount, alreadyClaimedCount
+                monthCount, monthAmount, monthCountChain, monthAmountChain
         );
     }
 
@@ -988,7 +987,7 @@ public class DashboardService {
         double successRate = totalOps > 0 ? (double) successCount / totalOps * 100 : 0;
 
         return new SandboxSummaryDTO(totalUsers, dailyUsers, chainRatio,
-                avgSec, avgDeltaSec, p95Sec, "<20s", successRate, failCount);
+                avgSec, avgDeltaSec, p95Sec, "<20s");
     }
 
     public SandboxTrendDTO getSandboxTrend() {
