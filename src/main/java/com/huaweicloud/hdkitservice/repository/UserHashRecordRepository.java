@@ -9,9 +9,13 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.List;
 
 @Repository
 public interface UserHashRecordRepository extends JpaRepository<UserHashRecord, String> {
+
+    List<UserHashRecord> findByUserIdHashIn(Collection<String> userHashes);
 
     @Modifying
     @Transactional

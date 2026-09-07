@@ -1,5 +1,6 @@
 package com.huaweicloud.hdkitservice.service;
 
+import com.huaweicloud.hdkitservice.config.HdkitTelemetryConfig;
 import com.huaweicloud.hdkitservice.model.TelemetryEvent;
 import com.huaweicloud.hdkitservice.model.TelemetryEventDto;
 import com.huaweicloud.hdkitservice.repository.TelemetryEventRepository;
@@ -10,7 +11,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -20,9 +24,15 @@ public class TelemetryService {
     private static final int MAX_BATCH_SIZE = 100;
 
     private final TelemetryEventRepository repository;
+    private final UserHashService userHashService;
+    private final HdkitTelemetryConfig config;
 
-    public TelemetryService(TelemetryEventRepository repository) {
+    public TelemetryService(TelemetryEventRepository repository,
+                            UserHashService userHashService,
+                            HdkitTelemetryConfig config) {
         this.repository = repository;
+        this.userHashService = userHashService;
+        this.config = config;
     }
 
     public int saveBatch(List<TelemetryEventDto> dtos) {
@@ -58,11 +68,20 @@ public class TelemetryService {
             }
         }
 
+        List<TelemetryEventDto> accepted = dtos;
+        if (config.isUserHashCheckEnabled()) {
+            accepted = filterByUserHash(dtos);
+            if (accepted.isEmpty()) {
+                log.warn("[telemetry] all events skipped by userHash check");
+                return 0;
+            }
+        }
+
         long now = System.currentTimeMillis();
         LocalDateTime serverTime = LocalDateTime.now();
-        List<TelemetryEvent> events = new ArrayList<>(dtos.size());
+        List<TelemetryEvent> events = new ArrayList<>(accepted.size());
 
-        for (TelemetryEventDto dto : dtos) {
+        for (TelemetryEventDto dto : accepted) {
             TelemetryEvent e = new TelemetryEvent(
                     UUID.randomUUID().toString(),
                     dto.key(),
@@ -99,5 +118,50 @@ public class TelemetryService {
             log.info("[telemetry] individual saved {} / {} events", saved, events.size());
             return saved;
         }
+    }
+
+    private List<TelemetryEventDto> filterByUserHash(List<TelemetryEventDto> dtos) {
+        Set<String> hashesToLookup = new HashSet<>();
+        for (TelemetryEventDto dto : dtos) {
+            String uh = dto.userHash();
+            if (uh != null && !uh.isBlank() && !isWhitelisted(uh)) {
+                hashesToLookup.add(uh);
+            }
+        }
+
+        Map<String, Boolean> flags = hashesToLookup.isEmpty()
+                ? Map.of()
+                : userHashService.resolveHashFlags(hashesToLookup);
+
+        List<TelemetryEventDto> accepted = new ArrayList<>(dtos.size());
+        int skipped = 0;
+        for (TelemetryEventDto dto : dtos) {
+            String uh = dto.userHash();
+            if (uh == null || uh.isBlank() || isWhitelisted(uh)) {
+                accepted.add(dto);
+                continue;
+            }
+            Boolean genByAsk = flags.get(uh);
+            if (genByAsk == null) {
+                skipped++;
+                log.warn("[telemetry] skipped illegal userHash {} for event {}", uh, dto.key());
+                continue;
+            }
+            if (genByAsk && !config.isPersistAkUserHash()) {
+                skipped++;
+                log.warn("[telemetry] skipped ak-generated userHash {} for event {}", uh, dto.key());
+                continue;
+            }
+            accepted.add(dto);
+        }
+
+        if (skipped > 0) {
+            log.warn("[telemetry] skipped {} events by userHash check", skipped);
+        }
+        return accepted;
+    }
+
+    private boolean isWhitelisted(String userHash) {
+        return config.getUserHashWhitelist().contains(userHash.trim().toLowerCase());
     }
 }

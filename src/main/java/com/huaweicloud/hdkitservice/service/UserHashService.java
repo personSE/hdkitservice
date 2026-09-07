@@ -1,5 +1,6 @@
 package com.huaweicloud.hdkitservice.service;
 
+import com.huaweicloud.hdkitservice.model.UserHashRecord;
 import com.huaweicloud.hdkitservice.repository.UserHashRecordRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,6 +8,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -36,5 +40,16 @@ public class UserHashService {
         } catch (Exception e) {
             log.warn("[userhash] persist failed, ignored: {}", e.getMessage());
         }
+    }
+
+    public Map<String, Boolean> resolveHashFlags(Collection<String> userHashes) {
+        Map<String, Boolean> flags = new HashMap<>();
+        if (userHashes == null || userHashes.isEmpty()) {
+            return flags;
+        }
+        for (UserHashRecord rec : repository.findByUserIdHashIn(userHashes)) {
+            flags.put(rec.getUserIdHash(), Boolean.TRUE.equals(rec.getIsGenByAsk()));
+        }
+        return flags;
     }
 }

@@ -19,6 +19,9 @@ spring:
 hdkit:
   telemetry:
     salt: "${TELEMETRY_SALT:changeme}"
+    userhash-check-enabled: ${TELEMETRY_USERHASH_CHECK_ENABLED:true}
+    persist-ak-userhash: ${PERSIST_AK_USERHASH:true}
+    userhash-whitelist: ${TELEMETRY_USERHASH_WHITELIST:test,sha256hash1234}
   rate-limit:
     telemetry:
       global-concurrency: ${RATE_LIMIT_TELEMETRY_CONCURRENCY:200}

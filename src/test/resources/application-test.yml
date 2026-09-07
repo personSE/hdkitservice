@@ -15,6 +15,9 @@ spring:
 hdkit:
   telemetry:
     salt: "test-salt"
+    userhash-check-enabled: true
+    persist-ak-userhash: true
+    userhash-whitelist: "test,sha256hash1234"
 
 dashboard:
   npm-package-name: "@huaweicloud/huaweicloud-devkit"

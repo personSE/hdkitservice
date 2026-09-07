@@ -8,6 +8,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,5 +46,19 @@ class UserHashRecordRepositoryTest {
         UserHashRecord rec = repository.findAll().get(0);
         assertNull(rec.getDomainId());
         assertTrue(rec.getIsGenByAsk());
+    }
+
+    @Test
+    void findByUserIdHashInReturnsMatchingRecords() {
+        repository.upsert(UUID.randomUUID().toString(), "hashC", "domainC", false, LocalDateTime.now());
+        repository.upsert(UUID.randomUUID().toString(), "hashD", "domainD", true, LocalDateTime.now());
+        repository.upsert(UUID.randomUUID().toString(), "hashE", "domainE", false, LocalDateTime.now());
+
+        List<UserHashRecord> result = repository.findByUserIdHashIn(List.of("hashC", "hashE"));
+
+        assertEquals(2, result.size());
+        for (UserHashRecord rec : result) {
+            assertTrue(List.of("hashC", "hashE").contains(rec.getUserIdHash()));
+        }
     }
 }

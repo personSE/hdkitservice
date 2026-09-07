@@ -1,5 +1,6 @@
 package com.huaweicloud.hdkitservice.service;
 
+import com.huaweicloud.hdkitservice.config.HdkitTelemetryConfig;
 import com.huaweicloud.hdkitservice.model.TelemetryEvent;
 import com.huaweicloud.hdkitservice.model.TelemetryEventDto;
 import com.huaweicloud.hdkitservice.repository.TelemetryEventRepository;
@@ -10,11 +11,13 @@ import org.springframework.dao.DataIntegrityViolationException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -25,12 +28,18 @@ import static org.mockito.Mockito.when;
 class TelemetryServiceTest {
 
     private TelemetryEventRepository repository;
+    private UserHashService userHashService;
+    private HdkitTelemetryConfig config;
     private TelemetryService telemetryService;
 
     @BeforeEach
     void setUp() {
         repository = mock(TelemetryEventRepository.class);
-        telemetryService = new TelemetryService(repository);
+        userHashService = mock(UserHashService.class);
+        config = new HdkitTelemetryConfig();
+        telemetryService = new TelemetryService(repository, userHashService, config);
+        when(userHashService.resolveHashFlags(anyCollection()))
+                .thenReturn(Map.of("hash1", false, "hash2", false));
     }
 
     @Test
@@ -135,5 +144,75 @@ class TelemetryServiceTest {
         assertEquals(2, received);
         verify(repository, times(1)).saveAll(anyList());
         verify(repository, times(2)).save(any(TelemetryEvent.class));
+    }
+
+    @Test
+    void skipIllegalUserHashWhenCheckEnabled() {
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "forged-hash", "1.0", "vscode", "1.2.3", "win", "10");
+        when(userHashService.resolveHashFlags(anyCollection())).thenReturn(Map.of());
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(0, received);
+        verify(repository, times(0)).saveAll(anyList());
+    }
+
+    @Test
+    void allowIllegalUserHashWhenCheckDisabled() {
+        config.setUserHashCheckEnabled(false);
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "forged-hash", "1.0", "vscode", "1.2.3", "win", "10");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(1, received);
+        verify(repository, times(1)).saveAll(anyList());
+    }
+
+    @Test
+    void allowBlankUserHashWhenCheckEnabled() {
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", null, "1.0", "vscode", "1.2.3", "win", "10");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(1, received);
+        verify(repository, times(1)).saveAll(anyList());
+        verify(userHashService, times(0)).resolveHashFlags(anyCollection());
+    }
+
+    @Test
+    void allowWhitelistedUserHashCaseInsensitive() {
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "  Sha256Hash1234 ", "1.0", "vscode", "1.2.3", "win", "10");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(1, received);
+        verify(repository, times(1)).saveAll(anyList());
+        verify(userHashService, times(0)).resolveHashFlags(anyCollection());
+    }
+
+    @Test
+    void skipAkGeneratedUserHashWhenPersistDisabled() {
+        config.setPersistAkUserHash(false);
+        when(userHashService.resolveHashFlags(anyCollection()))
+                .thenReturn(Map.of("ak-hash", true));
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "ak-hash", "1.0", "vscode", "1.2.3", "win", "10");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(0, received);
+        verify(repository, times(0)).saveAll(anyList());
+    }
+
+    @Test
+    void allowAkGeneratedUserHashWhenPersistEnabled() {
+        config.setPersistAkUserHash(true);
+        when(userHashService.resolveHashFlags(anyCollection()))
+                .thenReturn(Map.of("ak-hash", true));
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "ak-hash", "1.0", "vscode", "1.2.3", "win", "10");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(1, received);
+        verify(repository, times(1)).saveAll(anyList());
     }
 }
