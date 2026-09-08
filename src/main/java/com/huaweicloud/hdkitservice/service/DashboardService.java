@@ -46,6 +46,7 @@ import com.huaweicloud.hdkitservice.repository.VoucherClaimLogRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherFaceValueDailyRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherRecordRepository;
 import com.huaweicloud.hdkitservice.repository.GitHubStatsDailyRepository;
+import com.huaweicloud.hdkitservice.repository.UserIdHashRepository;
 import com.huaweicloud.hdkitservice.model.GitHubStatsDaily;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,6 +88,7 @@ public class DashboardService {
     private final SandboxHourlyStatsRepository sandboxHourlyRepo;
     private final SandboxSessionRepository sandboxSessionRepo;
     private final GitHubStatsDailyRepository githubRepo;
+    private final UserIdHashRepository userIdHashRepo;
 
     public DashboardService(MetricDailyRepository metricRepo,
                             AgentDistributionDailyRepository agentRepo,
@@ -101,7 +103,8 @@ public class DashboardService {
                             SandboxDurationBucketDailyRepository sandboxBucketRepo,
                             SandboxHourlyStatsRepository sandboxHourlyRepo,
                             SandboxSessionRepository sandboxSessionRepo,
-                            GitHubStatsDailyRepository githubRepo) {
+                            GitHubStatsDailyRepository githubRepo,
+                            UserIdHashRepository userIdHashRepo) {
         this.metricRepo = metricRepo;
         this.agentRepo = agentRepo;
         this.npmRepo = npmRepo;
@@ -116,6 +119,7 @@ public class DashboardService {
         this.sandboxHourlyRepo = sandboxHourlyRepo;
         this.sandboxSessionRepo = sandboxSessionRepo;
         this.githubRepo = githubRepo;
+        this.userIdHashRepo = userIdHashRepo;
     }
 
     public DeveloperSummaryDTO getDeveloperSummary() {
@@ -124,13 +128,13 @@ public class DashboardService {
         LocalDate prevDay = today.minusDays(2);
         LocalDate monthAgo = today.minusDays(30);
 
-        long totalDevs = getMetricValue(KEY_TOTAL_DEVELOERS, today, telemetryRepo::countDistinctUserHash);
+        long totalDevs = getMetricValue(KEY_TOTAL_DEVELOERS, today, userIdHashRepo::countAll);
         long dau = getMetricValue(KEY_DAU, today, () -> telemetryRepo.countDistinctUserHashByDate(today));
         long mau = getMetricValue(KEY_MAU, today, () -> telemetryRepo.countDistinctUserHashSince(monthAgo));
         long agentTotal = getMetricValue(KEY_AGENT_TOTAL, today, telemetryRepo::countDistinctAgentHarness);
 
-        long newUsersToday = getMetricValue(KEY_NEW_USERS, today, () -> telemetryRepo.countNewUsersByDate(today));
-        long newUsersYesterday = getMetricValue(KEY_NEW_USERS, yesterday, () -> telemetryRepo.countNewUsersByDate(yesterday));
+        long newUsersToday = getMetricValue(KEY_NEW_USERS, today, () -> userIdHashRepo.countNewByDate(today));
+        long newUsersYesterday = getMetricValue(KEY_NEW_USERS, yesterday, () -> userIdHashRepo.countNewByDate(yesterday));
         double chainRatio = 0;
         if (newUsersYesterday > 0) {
             chainRatio = (double) (newUsersToday - newUsersYesterday) / newUsersYesterday * 100;
@@ -305,11 +309,11 @@ public class DashboardService {
     public void aggregateMetrics(LocalDate date) {
         log.info("[dashboard] aggregating metrics for {}", date);
 
-        saveMetric(date, KEY_TOTAL_DEVELOERS, telemetryRepo.countDistinctUserHash());
+        saveMetric(date, KEY_TOTAL_DEVELOERS, userIdHashRepo.countAll());
         saveMetric(date, KEY_DAU, telemetryRepo.countDistinctUserHashByDate(date));
         saveMetric(date, KEY_MAU, telemetryRepo.countDistinctUserHashSince(date.minusDays(30)));
         saveMetric(date, KEY_AGENT_TOTAL, telemetryRepo.countDistinctAgentHarness());
-        saveMetric(date, KEY_NEW_USERS, telemetryRepo.countNewUsersByDate(date));
+        saveMetric(date, KEY_NEW_USERS, userIdHashRepo.countNewByDate(date));
 
         aggregateAgentDistribution(date);
     }
