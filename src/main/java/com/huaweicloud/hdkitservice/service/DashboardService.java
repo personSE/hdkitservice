@@ -246,7 +246,8 @@ public class DashboardService {
                 .map(NpmDownloadStats::getCumulativeDownloads)
                 .orElse(0L);
 
-        long githubDownloads = 0;
+        Optional<GitHubStatsDaily> githubOpt = githubRepo.findLatest();
+        long githubDownloads = githubOpt.map(g -> g.getStars() + g.getForks()).orElse(0L);
         long total = npmDownloads + githubDownloads;
 
         List<DownloadChannelDistributionDTO.ChannelItem> channels = new ArrayList<>();
@@ -979,12 +980,12 @@ public class DashboardService {
             chainRatio = 100;
         }
 
-        long avgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, today, () -> 0);
-        long yesterdayAvgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, yesterday, () -> 0);
+        long avgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, today, () -> calcAvgDuration(today));
+        long yesterdayAvgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, yesterday, () -> calcAvgDuration(yesterday));
         double avgSec = avgMs / 1000.0;
         double avgDeltaSec = (yesterdayAvgMs - avgMs) / 1000.0;
 
-        long p95Ms = getMetricValue(KEY_SANDBOX_P95_DURATION_MS, today, () -> 0);
+        long p95Ms = getMetricValue(KEY_SANDBOX_P95_DURATION_MS, today, () -> calcP95Duration(today));
         double p95Sec = p95Ms / 1000.0;
 
         long successCount = getMetricValue(KEY_SANDBOX_DAILY_SUCCESS, today, () -> 0);
@@ -994,6 +995,21 @@ public class DashboardService {
 
         return new SandboxSummaryDTO(totalUsers, dailyUsers, chainRatio,
                 avgSec, avgDeltaSec, p95Sec, "<20s");
+    }
+
+    private long calcAvgDuration(LocalDate date) {
+        List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
+        if (durations == null || durations.isEmpty()) return 0;
+        return (long) durations.stream().mapToLong(Long::longValue).average().orElse(0);
+    }
+
+    private long calcP95Duration(LocalDate date) {
+        List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
+        if (durations == null || durations.isEmpty()) return 0;
+        int idx = (int) Math.ceil(durations.size() * 0.95) - 1;
+        if (idx < 0) idx = 0;
+        if (idx >= durations.size()) idx = durations.size() - 1;
+        return durations.get(idx);
     }
 
     public SandboxTrendDTO getSandboxTrend() {
