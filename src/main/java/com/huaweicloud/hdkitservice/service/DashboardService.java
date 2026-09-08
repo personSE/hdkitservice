@@ -45,6 +45,8 @@ import com.huaweicloud.hdkitservice.repository.TelemetryEventRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherClaimLogRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherFaceValueDailyRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherRecordRepository;
+import com.huaweicloud.hdkitservice.repository.GitHubStatsDailyRepository;
+import com.huaweicloud.hdkitservice.model.GitHubStatsDaily;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -84,6 +86,7 @@ public class DashboardService {
     private final SandboxDurationBucketDailyRepository sandboxBucketRepo;
     private final SandboxHourlyStatsRepository sandboxHourlyRepo;
     private final SandboxSessionRepository sandboxSessionRepo;
+    private final GitHubStatsDailyRepository githubRepo;
 
     public DashboardService(MetricDailyRepository metricRepo,
                             AgentDistributionDailyRepository agentRepo,
@@ -97,7 +100,8 @@ public class DashboardService {
                             VoucherRecordRepository voucherRecordRepo,
                             SandboxDurationBucketDailyRepository sandboxBucketRepo,
                             SandboxHourlyStatsRepository sandboxHourlyRepo,
-                            SandboxSessionRepository sandboxSessionRepo) {
+                            SandboxSessionRepository sandboxSessionRepo,
+                            GitHubStatsDailyRepository githubRepo) {
         this.metricRepo = metricRepo;
         this.agentRepo = agentRepo;
         this.npmRepo = npmRepo;
@@ -111,6 +115,7 @@ public class DashboardService {
         this.sandboxBucketRepo = sandboxBucketRepo;
         this.sandboxHourlyRepo = sandboxHourlyRepo;
         this.sandboxSessionRepo = sandboxSessionRepo;
+        this.githubRepo = githubRepo;
     }
 
     public DeveloperSummaryDTO getDeveloperSummary() {
@@ -228,7 +233,8 @@ public class DashboardService {
                 .map(NpmDownloadStats::getCumulativeDownloads)
                 .orElse(0L);
 
-        long githubDownloads = 0;
+        Optional<GitHubStatsDaily> githubOpt = githubRepo.findLatest();
+        long githubDownloads = githubOpt.map(g -> g.getStars() + g.getForks()).orElse(0L);
         long total = npmCumulative + githubDownloads;
 
         return new DownloadChannelSummaryDTO(total, githubDownloads, npmCumulative, null, null);

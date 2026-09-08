@@ -40,8 +40,8 @@ hdkit:
     jwt-expiration-hours: ${JWT_EXPIRATION_HOURS:24}
 
 dashboard:
-  npm-package-name: "${DASHBOARD_NPM_PACKAGE_NAME:@huaweicloud/huaweicloud-devkit}"
-  npm-publish-date: "${DASHBOARD_NPM_PUBLISH_DATE:2025-01-01}"
+  npm-package-name: "${DASHBOARD_NPM_PACKAGE_NAME:huaweicloud-devkit}"
+  npm-publish-date: "${DASHBOARD_NPM_PUBLISH_DATE:2026-08-09}"
   npm-api-base: "${DASHBOARD_NPM_API_BASE:https://api.npmjs.org}"
   aggregation-enabled: "${DASHBOARD_AGGREGATION_ENABLED:true}"
   npm-fetch-enabled: "${DASHBOARD_NPM_FETCH_ENABLED:true}"
