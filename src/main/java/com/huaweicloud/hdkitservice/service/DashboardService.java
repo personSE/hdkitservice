@@ -720,7 +720,7 @@ public class DashboardService {
         List<ActivitySummaryDTO.FunnelStage> funnel = List.of(
                 new ActivitySummaryDTO.FunnelStage("参与活动", total, 100.0),
                 new ActivitySummaryDTO.FunnelStage("初章完成", c1, c1Rate),
-                new ActivitySummaryDTO.FunnelStage("第二章完成", c2, c2Rate),
+                new ActivitySummaryDTO.FunnelStage("进阶章完成", c2, c2Rate),
                 new ActivitySummaryDTO.FunnelStage("终章完成", c3, c3Rate)
         );
 
@@ -781,8 +781,8 @@ public class DashboardService {
 
         List<ActivityConversionDTO.ConvItem> stages = List.of(
                 new ActivityConversionDTO.ConvItem("参与 → 初章", r1),
-                new ActivityConversionDTO.ConvItem("初章 → 第二章", r2),
-                new ActivityConversionDTO.ConvItem("第二章 → 终章", r3)
+                new ActivityConversionDTO.ConvItem("初章 → 进阶章", r2),
+                new ActivityConversionDTO.ConvItem("进阶章 → 终章", r3)
         );
 
         return new ActivityConversionDTO(stages);
