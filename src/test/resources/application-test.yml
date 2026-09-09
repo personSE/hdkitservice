@@ -22,8 +22,8 @@ hdkit:
     test-harness-values: "test"
 
 dashboard:
-  npm-package-name: "@huaweicloud/huaweicloud-devkit"
-  npm-publish-date: "2025-01-01"
+  npm-package-name: "huaweicloud-devkit"
+  npm-publish-date: "2026-08-09"
   npm-api-base: "https://api.npmjs.org"
   aggregation-enabled: false
   npm-fetch-enabled: false

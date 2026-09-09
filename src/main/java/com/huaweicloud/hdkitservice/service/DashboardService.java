@@ -45,6 +45,9 @@ import com.huaweicloud.hdkitservice.repository.TelemetryEventRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherClaimLogRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherFaceValueDailyRepository;
 import com.huaweicloud.hdkitservice.repository.VoucherRecordRepository;
+import com.huaweicloud.hdkitservice.repository.GitHubStatsDailyRepository;
+import com.huaweicloud.hdkitservice.repository.UserIdHashRepository;
+import com.huaweicloud.hdkitservice.model.GitHubStatsDaily;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -84,6 +87,8 @@ public class DashboardService {
     private final SandboxDurationBucketDailyRepository sandboxBucketRepo;
     private final SandboxHourlyStatsRepository sandboxHourlyRepo;
     private final SandboxSessionRepository sandboxSessionRepo;
+    private final GitHubStatsDailyRepository githubRepo;
+    private final UserIdHashRepository userIdHashRepo;
 
     public DashboardService(MetricDailyRepository metricRepo,
                             AgentDistributionDailyRepository agentRepo,
@@ -97,7 +102,9 @@ public class DashboardService {
                             VoucherRecordRepository voucherRecordRepo,
                             SandboxDurationBucketDailyRepository sandboxBucketRepo,
                             SandboxHourlyStatsRepository sandboxHourlyRepo,
-                            SandboxSessionRepository sandboxSessionRepo) {
+                            SandboxSessionRepository sandboxSessionRepo,
+                            GitHubStatsDailyRepository githubRepo,
+                            UserIdHashRepository userIdHashRepo) {
         this.metricRepo = metricRepo;
         this.agentRepo = agentRepo;
         this.npmRepo = npmRepo;
@@ -111,6 +118,8 @@ public class DashboardService {
         this.sandboxBucketRepo = sandboxBucketRepo;
         this.sandboxHourlyRepo = sandboxHourlyRepo;
         this.sandboxSessionRepo = sandboxSessionRepo;
+        this.githubRepo = githubRepo;
+        this.userIdHashRepo = userIdHashRepo;
     }
 
     public DeveloperSummaryDTO getDeveloperSummary() {
@@ -119,13 +128,13 @@ public class DashboardService {
         LocalDate prevDay = today.minusDays(2);
         LocalDate monthAgo = today.minusDays(30);
 
-        long totalDevs = getMetricValue(KEY_TOTAL_DEVELOERS, today, telemetryRepo::countDistinctUserHash);
+        long totalDevs = getMetricValue(KEY_TOTAL_DEVELOERS, today, userIdHashRepo::countAll);
         long dau = getMetricValue(KEY_DAU, today, () -> telemetryRepo.countDistinctUserHashByDate(today));
         long mau = getMetricValue(KEY_MAU, today, () -> telemetryRepo.countDistinctUserHashSince(monthAgo));
         long agentTotal = getMetricValue(KEY_AGENT_TOTAL, today, telemetryRepo::countDistinctAgentHarness);
 
-        long newUsersToday = getMetricValue(KEY_NEW_USERS, today, () -> telemetryRepo.countNewUsersByDate(today));
-        long newUsersYesterday = getMetricValue(KEY_NEW_USERS, yesterday, () -> telemetryRepo.countNewUsersByDate(yesterday));
+        long newUsersToday = getMetricValue(KEY_NEW_USERS, today, () -> userIdHashRepo.countNewByDate(today));
+        long newUsersYesterday = getMetricValue(KEY_NEW_USERS, yesterday, () -> userIdHashRepo.countNewByDate(yesterday));
         double chainRatio = 0;
         if (newUsersYesterday > 0) {
             chainRatio = (double) (newUsersToday - newUsersYesterday) / newUsersYesterday * 100;
@@ -228,7 +237,8 @@ public class DashboardService {
                 .map(NpmDownloadStats::getCumulativeDownloads)
                 .orElse(0L);
 
-        long githubDownloads = 0;
+        Optional<GitHubStatsDaily> githubOpt = githubRepo.findLatest();
+        long githubDownloads = githubOpt.map(g -> g.getStars() + g.getForks()).orElse(0L);
         long total = npmCumulative + githubDownloads;
 
         return new DownloadChannelSummaryDTO(total, githubDownloads, npmCumulative, null, null);
@@ -240,7 +250,8 @@ public class DashboardService {
                 .map(NpmDownloadStats::getCumulativeDownloads)
                 .orElse(0L);
 
-        long githubDownloads = 0;
+        Optional<GitHubStatsDaily> githubOpt = githubRepo.findLatest();
+        long githubDownloads = githubOpt.map(g -> g.getStars() + g.getForks()).orElse(0L);
         long total = npmDownloads + githubDownloads;
 
         List<DownloadChannelDistributionDTO.ChannelItem> channels = new ArrayList<>();
@@ -298,11 +309,11 @@ public class DashboardService {
     public void aggregateMetrics(LocalDate date) {
         log.info("[dashboard] aggregating metrics for {}", date);
 
-        saveMetric(date, KEY_TOTAL_DEVELOERS, telemetryRepo.countDistinctUserHash());
+        saveMetric(date, KEY_TOTAL_DEVELOERS, userIdHashRepo.countAll());
         saveMetric(date, KEY_DAU, telemetryRepo.countDistinctUserHashByDate(date));
         saveMetric(date, KEY_MAU, telemetryRepo.countDistinctUserHashSince(date.minusDays(30)));
         saveMetric(date, KEY_AGENT_TOTAL, telemetryRepo.countDistinctAgentHarness());
-        saveMetric(date, KEY_NEW_USERS, telemetryRepo.countNewUsersByDate(date));
+        saveMetric(date, KEY_NEW_USERS, userIdHashRepo.countNewByDate(date));
 
         aggregateAgentDistribution(date);
     }
@@ -709,7 +720,7 @@ public class DashboardService {
         List<ActivitySummaryDTO.FunnelStage> funnel = List.of(
                 new ActivitySummaryDTO.FunnelStage("参与活动", total, 100.0),
                 new ActivitySummaryDTO.FunnelStage("初章完成", c1, c1Rate),
-                new ActivitySummaryDTO.FunnelStage("第二章完成", c2, c2Rate),
+                new ActivitySummaryDTO.FunnelStage("进阶章完成", c2, c2Rate),
                 new ActivitySummaryDTO.FunnelStage("终章完成", c3, c3Rate)
         );
 
@@ -770,8 +781,8 @@ public class DashboardService {
 
         List<ActivityConversionDTO.ConvItem> stages = List.of(
                 new ActivityConversionDTO.ConvItem("参与 → 初章", r1),
-                new ActivityConversionDTO.ConvItem("初章 → 第二章", r2),
-                new ActivityConversionDTO.ConvItem("第二章 → 终章", r3)
+                new ActivityConversionDTO.ConvItem("初章 → 进阶章", r2),
+                new ActivityConversionDTO.ConvItem("进阶章 → 终章", r3)
         );
 
         return new ActivityConversionDTO(stages);
@@ -833,8 +844,7 @@ public class DashboardService {
         return new VoucherSummaryDTO(
                 totalCount, totalAmount,
                 todayCount, todayAmount, todayCountChain, todayAmountChain,
-                monthCount, monthAmount, monthCountChain, monthAmountChain,
-                successRate, failCount, alreadyClaimedCount
+                monthCount, monthAmount, monthCountChain, monthAmountChain
         );
     }
 
@@ -974,12 +984,12 @@ public class DashboardService {
             chainRatio = 100;
         }
 
-        long avgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, today, () -> 0);
-        long yesterdayAvgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, yesterday, () -> 0);
+        long avgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, today, () -> calcAvgDuration(today));
+        long yesterdayAvgMs = getMetricValue(KEY_SANDBOX_AVG_DURATION_MS, yesterday, () -> calcAvgDuration(yesterday));
         double avgSec = avgMs / 1000.0;
         double avgDeltaSec = (yesterdayAvgMs - avgMs) / 1000.0;
 
-        long p95Ms = getMetricValue(KEY_SANDBOX_P95_DURATION_MS, today, () -> 0);
+        long p95Ms = getMetricValue(KEY_SANDBOX_P95_DURATION_MS, today, () -> calcP95Duration(today));
         double p95Sec = p95Ms / 1000.0;
 
         long successCount = getMetricValue(KEY_SANDBOX_DAILY_SUCCESS, today, () -> 0);
@@ -988,7 +998,22 @@ public class DashboardService {
         double successRate = totalOps > 0 ? (double) successCount / totalOps * 100 : 0;
 
         return new SandboxSummaryDTO(totalUsers, dailyUsers, chainRatio,
-                avgSec, avgDeltaSec, p95Sec, "<20s", successRate, failCount);
+                avgSec, avgDeltaSec, p95Sec, "<20s");
+    }
+
+    private long calcAvgDuration(LocalDate date) {
+        List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
+        if (durations == null || durations.isEmpty()) return 0;
+        return (long) durations.stream().mapToLong(Long::longValue).average().orElse(0);
+    }
+
+    private long calcP95Duration(LocalDate date) {
+        List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
+        if (durations == null || durations.isEmpty()) return 0;
+        int idx = (int) Math.ceil(durations.size() * 0.95) - 1;
+        if (idx < 0) idx = 0;
+        if (idx >= durations.size()) idx = durations.size() - 1;
+        return durations.get(idx);
     }
 
     public SandboxTrendDTO getSandboxTrend() {

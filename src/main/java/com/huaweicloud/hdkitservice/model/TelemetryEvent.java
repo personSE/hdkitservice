@@ -50,12 +50,16 @@ public class TelemetryEvent {
     @Column(name = "server_time", nullable = false)
     private LocalDateTime serverTime;
 
+    @Column(name = "source", length = 64)
+    private String source;
+
     public TelemetryEvent() {
     }
 
     public TelemetryEvent(String eventId, String eventKey, String eventValue, String installId,
                           String userHash, String pluginVersion, String agentHarness, String agentVersion,
-                          String os, String osVersion, String capability, Long eventTime, LocalDateTime serverTime) {
+                          String os, String osVersion, String capability, Long eventTime, LocalDateTime serverTime,
+                          String source) {
         this.eventId = eventId;
         this.eventKey = eventKey;
         this.eventValue = eventValue;
@@ -69,6 +73,7 @@ public class TelemetryEvent {
         this.capability = capability;
         this.eventTime = eventTime;
         this.serverTime = serverTime;
+        this.source = source;
     }
 
     public String getEventId() { return eventId; }
@@ -97,4 +102,6 @@ public class TelemetryEvent {
     public void setEventTime(Long eventTime) { this.eventTime = eventTime; }
     public LocalDateTime getServerTime() { return serverTime; }
     public void setServerTime(LocalDateTime serverTime) { this.serverTime = serverTime; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
 }

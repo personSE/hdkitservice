@@ -38,7 +38,9 @@ public class TelemetryService {
         this.checkService = checkService;
     }
 
-    public int saveBatch(List<TelemetryEventDto> dtos) {
+    private static final String DEFAULT_SOURCE = "hdkit";
+
+    public int saveBatch(List<TelemetryEventDto> dtos, String source) {
         if (dtos == null || dtos.isEmpty()) {
             return 0;
         }
@@ -88,6 +90,7 @@ public class TelemetryService {
         long now = System.currentTimeMillis();
         LocalDateTime serverTime = LocalDateTime.now();
         List<TelemetryEvent> events = new ArrayList<>(accepted.size());
+        String effectiveSource = (source == null || source.isBlank()) ? DEFAULT_SOURCE : source;
 
         for (TelemetryEventDto dto : accepted) {
             TelemetryEvent e = new TelemetryEvent(
@@ -103,7 +106,8 @@ public class TelemetryService {
                     dto.osVersion(),
                     dto.capability(),
                     now,
-                    serverTime
+                    serverTime,
+                    effectiveSource
             );
             events.add(e);
         }

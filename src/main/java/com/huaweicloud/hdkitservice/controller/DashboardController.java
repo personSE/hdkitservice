@@ -78,9 +78,33 @@ public class DashboardController {
     }
 
     @GetMapping("/aggregate")
-    public String triggerAggregation() {
-        dashboardService.aggregateMetrics(java.time.LocalDate.now());
-        return "{\"status\":\"ok\"}";
+    public String triggerAggregation(
+            @RequestParam(value = "startDate", required = false) String startDateStr,
+            @RequestParam(value = "endDate", required = false) String endDateStr) {
+        java.time.LocalDate startDate;
+        java.time.LocalDate endDate;
+
+        if (startDateStr != null && !startDateStr.isEmpty()) {
+            startDate = java.time.LocalDate.parse(startDateStr);
+        } else {
+            startDate = java.time.LocalDate.now();
+        }
+        if (endDateStr != null && !endDateStr.isEmpty()) {
+            endDate = java.time.LocalDate.parse(endDateStr);
+        } else {
+            endDate = startDate;
+        }
+
+        java.util.List<String> dates = new java.util.ArrayList<>();
+        for (java.time.LocalDate d = startDate; !d.isAfter(endDate); d = d.plusDays(1)) {
+            dashboardService.aggregateMetrics(d);
+            dashboardService.aggregateCapabilityMetrics(d);
+            dashboardService.aggregateVoucherMetrics(d);
+            dashboardService.aggregateSandboxMetrics(d);
+            dates.add(d.toString());
+        }
+
+        return "{\"status\":\"ok\",\"dates\":" + new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(dates).toString() + "}";
     }
 
     // ==================== Open Capabilities ====================
