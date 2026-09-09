@@ -26,13 +26,16 @@ public class TelemetryService {
     private final TelemetryEventRepository repository;
     private final UserHashService userHashService;
     private final HdkitTelemetryConfig config;
+    private final TelemetryEventCheckService checkService;
 
     public TelemetryService(TelemetryEventRepository repository,
                             UserHashService userHashService,
-                            HdkitTelemetryConfig config) {
+                            HdkitTelemetryConfig config,
+                            TelemetryEventCheckService checkService) {
         this.repository = repository;
         this.userHashService = userHashService;
         this.config = config;
+        this.checkService = checkService;
     }
 
     public int saveBatch(List<TelemetryEventDto> dtos) {
@@ -68,9 +71,14 @@ public class TelemetryService {
             }
         }
 
-        List<TelemetryEventDto> accepted = dtos;
+        List<TelemetryEventDto> accepted = checkService.filter(dtos);
+        if (accepted.isEmpty()) {
+            log.warn("[telemetry] all events dropped by check filters");
+            return 0;
+        }
+
         if (config.isUserHashCheckEnabled()) {
-            accepted = filterByUserHash(dtos);
+            accepted = filterByUserHash(accepted);
             if (accepted.isEmpty()) {
                 log.warn("[telemetry] all events skipped by userHash check");
                 return 0;

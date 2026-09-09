@@ -14,6 +14,8 @@ public class HdkitTelemetryConfig {
     private boolean userHashCheckEnabled = true;
     private boolean persistAkUserHash = true;
     private Set<String> userHashWhitelist = new HashSet<>(Set.of("test", "sha256hash1234"));
+    private boolean filterTestHarnessEnabled = true;
+    private Set<String> testHarnessValues = new HashSet<>(Set.of("test"));
 
     public String getSalt() {
         return salt;
@@ -45,6 +47,22 @@ public class HdkitTelemetryConfig {
 
     public void setUserHashWhitelist(Set<String> userHashWhitelist) {
         this.userHashWhitelist = normalizeWhitelist(userHashWhitelist);
+    }
+
+    public boolean isFilterTestHarnessEnabled() {
+        return filterTestHarnessEnabled;
+    }
+
+    public void setFilterTestHarnessEnabled(boolean filterTestHarnessEnabled) {
+        this.filterTestHarnessEnabled = filterTestHarnessEnabled;
+    }
+
+    public Set<String> getTestHarnessValues() {
+        return testHarnessValues;
+    }
+
+    public void setTestHarnessValues(Set<String> testHarnessValues) {
+        this.testHarnessValues = normalizeWhitelist(testHarnessValues);
     }
 
     private static Set<String> normalizeWhitelist(Set<String> raw) {

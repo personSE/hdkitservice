@@ -37,7 +37,9 @@ class TelemetryServiceTest {
         repository = mock(TelemetryEventRepository.class);
         userHashService = mock(UserHashService.class);
         config = new HdkitTelemetryConfig();
-        telemetryService = new TelemetryService(repository, userHashService, config);
+        TelemetryEventCheckService checkService =
+                new TelemetryEventCheckService(List.of(new TestHarnessFilterRule(config)));
+        telemetryService = new TelemetryService(repository, userHashService, config, checkService);
         when(userHashService.resolveHashFlags(anyCollection()))
                 .thenReturn(Map.of("hash1", false, "hash2", false));
     }
@@ -188,6 +190,47 @@ class TelemetryServiceTest {
         assertEquals(1, received);
         verify(repository, times(1)).saveAll(anyList());
         verify(userHashService, times(0)).resolveHashFlags(anyCollection());
+    }
+
+    @Test
+    void skipTestHarnessEvent() {
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "hash1", "1.0", "test", "1.2.3", "linux", "6.17.0-1022-azure");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(0, received);
+        verify(repository, times(0)).saveAll(anyList());
+    }
+
+    @Test
+    void skipTestHarnessCaseInsensitive() {
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "hash1", "1.0", "  TEST ", "1.2.3", "linux", "6.17.0-1022-azure");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(0, received);
+        verify(repository, times(0)).saveAll(anyList());
+    }
+
+    @Test
+    void allowTestHarnessWhenFilterDisabled() {
+        config.setFilterTestHarnessEnabled(false);
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "hash1", "1.0", "test", "1.2.3", "linux", "6.17.0-1022-azure");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(1, received);
+        verify(repository, times(1)).saveAll(anyList());
+    }
+
+    @Test
+    void allowBlankHarness() {
+        TelemetryEventDto dto = new TelemetryEventDto("key1", "value1", "mcp",
+                "inst1", "hash1", "1.0", null, "1.2.3", "linux", "6.17.0-1022-azure");
+
+        int received = telemetryService.saveBatch(List.of(dto));
+        assertEquals(1, received);
+        verify(repository, times(1)).saveAll(anyList());
     }
 
     @Test

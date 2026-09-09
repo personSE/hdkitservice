@@ -18,6 +18,8 @@ hdkit:
     userhash-check-enabled: true
     persist-ak-userhash: true
     userhash-whitelist: "test,sha256hash1234"
+    filter-test-harness-enabled: true
+    test-harness-values: "test"
 
 dashboard:
   npm-package-name: "@huaweicloud/huaweicloud-devkit"
