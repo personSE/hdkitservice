@@ -964,7 +964,7 @@ public class DashboardService {
     private static final String KEY_SANDBOX_DAILY_REUSE = "sandbox_daily_reuse";
     private static final String KEY_SANDBOX_TOTAL_USERS = "sandbox_total_users";
     private static final String KEY_SANDBOX_AVG_DURATION_MS = "sandbox_avg_duration_ms";
-    private static final String KEY_SANDBOX_P95_DURATION_MS = "sandbox_p95_duration_ms";
+
 
     public SandboxSummaryDTO getSandboxSummary() {
         LocalDate today = LocalDate.now();
@@ -989,16 +989,13 @@ public class DashboardService {
         double avgSec = avgMs / 1000.0;
         double avgDeltaSec = (yesterdayAvgMs - avgMs) / 1000.0;
 
-        long p95Ms = getMetricValue(KEY_SANDBOX_P95_DURATION_MS, today, () -> calcP95Duration(today));
-        double p95Sec = p95Ms / 1000.0;
-
         long successCount = getMetricValue(KEY_SANDBOX_DAILY_SUCCESS, today, () -> 0);
         long failCount = getMetricValue(KEY_SANDBOX_DAILY_FAIL, today, () -> 0);
         long totalOps = successCount + failCount;
         double successRate = totalOps > 0 ? (double) successCount / totalOps * 100 : 0;
 
         return new SandboxSummaryDTO(totalUsers, dailyUsers, chainRatio,
-                avgSec, avgDeltaSec, p95Sec, "<20s");
+                avgSec, avgDeltaSec, "<20s");
     }
 
     private long calcAvgDuration(LocalDate date) {
@@ -1007,14 +1004,6 @@ public class DashboardService {
         return (long) durations.stream().mapToLong(Long::longValue).average().orElse(0);
     }
 
-    private long calcP95Duration(LocalDate date) {
-        List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
-        if (durations == null || durations.isEmpty()) return 0;
-        int idx = (int) Math.ceil(durations.size() * 0.95) - 1;
-        if (idx < 0) idx = 0;
-        if (idx >= durations.size()) idx = durations.size() - 1;
-        return durations.get(idx);
-    }
 
     public SandboxTrendDTO getSandboxTrend() {
         LocalDate startDate = LocalDate.now().minusDays(29);
@@ -1107,9 +1096,7 @@ public class DashboardService {
         List<Long> durations = sandboxSessionRepo.findSuccessDurationsByDate(date);
         if (durations != null && !durations.isEmpty()) {
             long avg = durations.stream().mapToLong(l -> l).sum() / durations.size();
-            long p95 = calcP95Long(durations);
             saveMetric(date, KEY_SANDBOX_AVG_DURATION_MS, avg);
-            saveMetric(date, KEY_SANDBOX_P95_DURATION_MS, p95);
 
             aggregateDurationBuckets(date, durations);
         }
@@ -1119,21 +1106,6 @@ public class DashboardService {
         log.info("[sandbox] done for {}", date);
     }
 
-    private long calcP95(List<Double> durations) {
-        List<Double> copy = new ArrayList<>(durations);
-        Collections.sort(copy);
-        int idx = (int) Math.ceil(copy.size() * 0.95) - 1;
-        idx = Math.max(0, idx);
-        return (long) copy.get(idx).doubleValue();
-    }
-
-    private long calcP95Long(List<Long> durations) {
-        List<Long> copy = new ArrayList<>(durations);
-        Collections.sort(copy);
-        int idx = (int) Math.ceil(copy.size() * 0.95) - 1;
-        idx = Math.max(0, idx);
-        return copy.get(idx);
-    }
 
     private void aggregateDurationBuckets(LocalDate date, List<Long> durations) {
         Object[][] buckets = {
