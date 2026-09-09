@@ -3,6 +3,7 @@ package com.huaweicloud.hdkitservice.controller;
 import com.huaweicloud.hdkitservice.model.TelemetryEventDto;
 import com.huaweicloud.hdkitservice.service.SandboxService;
 import com.huaweicloud.hdkitservice.service.TelemetryService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,7 +25,8 @@ public class TelemetryController {
     }
 
     @PostMapping(value = "/telemetry/events", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> postEvents(@RequestBody List<TelemetryEventDto> events) {
+    public ResponseEntity<Map<String, Object>> postEvents(@RequestBody List<TelemetryEventDto> events,
+                                                          HttpServletRequest request) {
         if (events == null || events.isEmpty()) {
             return ResponseEntity.ok(Map.of("received", 0));
         }
@@ -34,7 +36,8 @@ public class TelemetryController {
                         "installId is required.", null);
             }
         }
-        int received = telemetryService.saveBatch(events);
+        String source = (String) request.getAttribute("source");
+        int received = telemetryService.saveBatch(events, source);
         return ResponseEntity.ok(Map.of("received", received));
     }
 }

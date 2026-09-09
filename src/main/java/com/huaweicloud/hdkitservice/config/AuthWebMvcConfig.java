@@ -8,9 +8,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class AuthWebMvcConfig implements WebMvcConfigurer {
 
     private final AuthInterceptor authInterceptor;
+    private final ApiKeyInterceptor apiKeyInterceptor;
 
-    public AuthWebMvcConfig(AuthInterceptor authInterceptor) {
+    public AuthWebMvcConfig(AuthInterceptor authInterceptor, ApiKeyInterceptor apiKeyInterceptor) {
         this.authInterceptor = authInterceptor;
+        this.apiKeyInterceptor = apiKeyInterceptor;
     }
 
     @Override
@@ -21,6 +23,12 @@ public class AuthWebMvcConfig implements WebMvcConfigurer {
                         "/rest/developer/server/auth/**",
                         "/rest/developer/server/telemetry/**",
                         "/rest/developer/server/user/**"
+                );
+
+        registry.addInterceptor(apiKeyInterceptor)
+                .addPathPatterns(
+                        "/rest/developer/server/hdkitservice/telemetry/**",
+                        "/rest/developer/server/hdkitservice/user/**"
                 );
     }
 }
