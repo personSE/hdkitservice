@@ -27,8 +27,7 @@ public class AuthWebMvcConfig implements WebMvcConfigurer {
 
         registry.addInterceptor(apiKeyInterceptor)
                 .addPathPatterns(
-                        "/rest/developer/server/hdkitservice/telemetry/**",
-                        "/rest/developer/server/hdkitservice/user/**"
+                        "/rest/developer/server/hdkitservice/external/**"
                 );
     }
 }
